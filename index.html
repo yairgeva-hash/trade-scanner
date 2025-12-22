@@ -121,9 +121,7 @@
       <input id="strictness" type="range" min="0" max="100" value="70" />
       <input id="strictnessNum" type="number" min="0" max="100" value="70" />
     </div>
-    <div class="smallnote" id="strictnessHint">
-      70 = strict (more NO TRADE). Lower = more trades (lower confidence).
-    </div>
+    <div class="smallnote" id="strictnessHint"></div>
 
     <label>Optional filters (applied to all topics)</label>
     <div class="row">
@@ -148,8 +146,8 @@
     <div id="pills" class="pillbar"></div>
 
     <div class="smallnote">
-      This version mimics “GPT rules” without paid APIs by using catalyst filtering, signed winner/loser weights,
-      liquidity gating, ETF preference, and a NO TRADE decision. Use Strictness to relax gates.
+      Strictness controls: catalyst filter hardness, liquidity gate, ETF preference bonus, “NO TRADE” gates, and whether “Idea Mode” is enabled.
+      At very low strictness, the app will output ideas even if conviction is low.
     </div>
 
     <div class="hr"></div>
@@ -221,6 +219,7 @@
     { key:"oil", label:"oil", terms:['"crude oil"','Brent','WTI','"oil prices"','"oil supply"'] }
   ];
 
+  // Signed sector effects: + means likely winners, - means likely losers (long-only focus).
   const TOPIC_SECTOR_WEIGHTS = {
     geopolitics: { defense:+0.80, energy:+0.55, shipping:+0.20, gold:+0.40, insurers:-0.10, semis:-0.05, cyber:+0.10 },
     sanctions:   { energy:+0.30, shipping:+0.20, defense:+0.20, semis:-0.25, gold:+0.25 },
@@ -299,13 +298,14 @@
 
   let lastScan = null;
 
-  // ---------- Runtime tuning (Strictness) ----------
+  // ---------- Runtime tuning (Strictness + Idea Mode) ----------
   const RUNTIME = {
-    strictness: 0.70,   // 0..1
-    liqFloor: 0.55,     // dynamic
-    etfBonus: 1.12,     // dynamic
-    minCatalysts: 2,    // dynamic
-    minAvgTrade01: 0.58 // dynamic
+    strictness: 0.70,    // 0..1
+    liqFloor: 0.55,      // dynamic
+    etfBonus: 1.12,      // dynamic
+    minCatalysts: 2,     // dynamic
+    minAvgTrade01: 0.58, // dynamic
+    ideaMode: false      // dynamic
   };
 
   function applyStrictnessFromUI(){
@@ -317,14 +317,19 @@
     RUNTIME.strictness = s;
 
     // Relax as strictness falls
-    RUNTIME.liqFloor = 0.45 + s * (0.55 - 0.45);           // 0.45..0.55
-    RUNTIME.etfBonus = 1.06 + s * (1.12 - 1.06);           // 1.06..1.12
-    RUNTIME.minCatalysts = Math.round(1 + s * 1);          // 1..2
-    RUNTIME.minAvgTrade01 = 0.40 + s * (0.58 - 0.40);      // 0.40..0.58
+    RUNTIME.liqFloor = 0.40 + s * (0.55 - 0.40);           // 0.40..0.55
+    RUNTIME.etfBonus = 1.03 + s * (1.12 - 1.03);           // 1.03..1.12
+    RUNTIME.minCatalysts = Math.round(s * 2);              // 0..2
+    RUNTIME.minAvgTrade01 = 0.20 + s * (0.58 - 0.20);      // 0.20..0.58
+
+    // Idea mode: at very low strictness, always output picks (with warning)
+    RUNTIME.ideaMode = (s <= 0.15);
 
     const label = v >= 70 ? "strict" : v >= 45 ? "balanced" : "lenient";
     el.strictnessHint.textContent =
-      `${v} = ${label} | minStrong=${RUNTIME.minCatalysts}, minAvg=${RUNTIME.minAvgTrade01.toFixed(2)}, liqFloor=${RUNTIME.liqFloor.toFixed(2)}, ETFbonus=${RUNTIME.etfBonus.toFixed(2)}`;
+      `${v} = ${label} | ideaMode=${RUNTIME.ideaMode ? "ON" : "OFF"} | ` +
+      `minStrong=${RUNTIME.minCatalysts}, minAvg=${RUNTIME.minAvgTrade01.toFixed(2)}, ` +
+      `liqFloor=${RUNTIME.liqFloor.toFixed(2)}, ETFbonus=${RUNTIME.etfBonus.toFixed(2)}`;
   }
 
   // ---------- Helpers ----------
@@ -418,7 +423,7 @@
 
     if(hasNumber || hasStrong) return true;
 
-    // Lenient mode: allow “weak but relevant” topic mentions
+    // Lenient mode: allow weaker topic words as catalysts
     if(RUNTIME.strictness <= 0.45){
       const topicWords = ["sanction","ceasefire","tariff","cyber","earthquake","flood","wildfire","inflation","recession","opec","oil","war","strike"];
       if(topicWords.some(w => t.includes(w))) return true;
@@ -573,7 +578,7 @@
 
           info.score += add;
 
-          if(add > 0.030){
+          if(Math.abs(add) > 0.030){
             info.drivers.push({
               add,
               topicKey: h.topicKey,
@@ -588,16 +593,19 @@
     }
 
     const arr = Object.values(tickerInfo);
-    const maxPos = Math.max(0.0001, ...arr.map(x => x.score));
+
+    // Normalize based on absolute value so idea mode always ranks something
+    const maxAbs = Math.max(0.0001, ...arr.map(x => Math.abs(x.score)));
 
     for(const x of arr){
-      x.scoreN = x.score / maxPos;
-      x.score100 = Math.round(x.scoreN * 100);
-      x.drivers.sort((a,b)=>b.add-a.add);
+      x.scoreN = x.score / maxAbs;                // -1..+1
+      x.score100 = Math.round(Math.abs(x.scoreN) * 100);
+      x.drivers.sort((a,b)=>Math.abs(b.add)-Math.abs(a.add));
       x.drivers = x.drivers.slice(0,4);
     }
 
-    arr.sort((a,b)=>b.score-a.score);
+    // Sort by absolute score (so even negative “loser” setups show in Idea Mode)
+    arr.sort((a,b)=>Math.abs(b.score)-Math.abs(a.score));
     return arr;
   }
 
@@ -646,19 +654,15 @@
   function renderMethod(){
     el.viewMethod.innerHTML = `
       <div class="item">
-        <div class="title">Method (Free-only GPT-like rules + Strictness)</div>
+        <div class="title">Method</div>
         <div class="smallnote">
-          Headlines are filtered for likely price-moving catalysts. Strictness controls how hard the filter and “NO TRADE” gates are.
-          Tradeability (1–10) comes from:
+          Tradeability (1–10) = Clarity + Timing + Shock. Signed topic→sector weights map events into likely winners (+) and losers (-).
+          The system is long-only by default; negative scores mean “likely loser” exposure (useful as a warning, or for future short support).
         </div>
         <div class="scoreline">
-          <span class="badge"><span class="dot ok"></span><b>Clarity</b> (numbers, actions, institutions)</span>
-          <span class="badge"><span class="dot ok"></span><b>Timing</b> (recency decay)</span>
-          <span class="badge"><span class="dot ok"></span><b>Shock</b> (keyword intensity)</span>
-        </div>
-        <div class="smallnote">
-          Ticker ranking uses signed winner/loser sector weights, liquidity gating, and an ETF preference bonus.
-          At low strictness, the system may keep weaker headlines as “soft” catalysts to propose ideas.
+          <span class="badge"><span class="dot ok"></span><b>Strictness</b> controls filter hardness + gates</span>
+          <span class="badge"><span class="dot ok"></span><b>Idea Mode</b> turns ON at ≤15% strictness to always output ideas</span>
+          <span class="badge"><span class="dot ok"></span><b>AvgTopK</b> uses top-K catalysts to avoid dilution</span>
         </div>
       </div>
     `;
@@ -666,17 +670,19 @@
 
   function renderPicks(scan){
     if(scan.noTrade){
+      const title = "NO TRADE";
       el.viewPicks.innerHTML = `
         <div class="item">
-          <div class="title">NO TRADE</div>
+          <div class="title">${title}</div>
           <div class="sub">
             <span class="badge"><span class="dot bad"></span><b>Strong catalysts:</b> ${scan.strongCatalysts}</span>
-            <span class="badge"><b>Avg tradeability:</b> ${round2(scan.avgTrade01)}</span>
-            <span class="badge"><b>Kept catalysts:</b> ${scan.countKept}</span>
+            <span class="badge"><b>AvgTopK tradeability:</b> ${round2(scan.avgTrade01)}</span>
+            <span class="badge"><b>AvgAll:</b> ${round2(scan.avgAllTrade01)}</span>
+            <span class="badge"><b>Kept:</b> ${scan.countKept}</span>
             <span class="badge"><b>Strictness:</b> ${scan.strictnessPct}%</span>
           </div>
           <div class="smallnote" style="margin-top:8px;">
-            Reduce Strictness to force more trade ideas (with lower confidence), or increase lookback.
+            Reduce Strictness, increase lookback, or remove filters. At ≤15% strictness, Idea Mode forces picks.
           </div>
         </div>
       `;
@@ -690,14 +696,28 @@
     }
 
     const tz = scan.opts.tz;
+    const head = scan.ideaMode ? "IDEA MODE (Low Conviction)" : "Top 3 Picks";
 
-    el.viewPicks.innerHTML = picks.map((p, idx) => {
+    const preface = scan.ideaMode ? `
+      <div class="item">
+        <div class="title">${head}</div>
+        <div class="smallnote">
+          Idea Mode is ON: gates are relaxed; treat these as exploratory setups, not “high-confidence” trades.
+        </div>
+      </div>
+    ` : "";
+
+    const cards = picks.map((p, idx) => {
+      const dir = p.score >= 0 ? "winner bias" : "loser bias";
+      const dirDot = p.score >= 0 ? "ok" : "bad";
+
       const drivers = (p.drivers || []).map(d => {
         const when = d.seenDate ? fmtDate(new Date(d.seenDate), tz) : "";
         const soft = d.soft ? `<span class="badge"><span class="dot bad"></span>soft</span>` : "";
+        const sign = d.add >= 0 ? "+" : "";
         return `
           <div class="sub" style="margin-top:6px;">
-            <span class="badge"><span class="dot ok"></span>+${round2(d.add)} driver</span>
+            <span class="badge"><span class="dot ${dirDot}"></span>${sign}${round2(d.add)} driver</span>
             ${soft}
             <span>${escapeHtml(d.topicKey)}</span>
             <a href="${escapeHtml(d.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(d.title)}</a>
@@ -710,18 +730,21 @@
         <div class="item">
           <div class="title">${idx+1}) ${escapeHtml(p.ticker)} <span class="badge">${escapeHtml(p.group)}</span></div>
           <div class="sub">
-            <span class="badge"><span class="dot ok"></span><b>Setup score:</b> ${p.score100}/100</span>
+            <span class="badge"><span class="dot ${dirDot}"></span><b>Setup score:</b> ${p.score100}/100</span>
+            <span class="badge"><b>Bias:</b> ${dir}</span>
             <span class="badge"><b>ETF:</b> ${p.isEtf ? "yes" : "no"}</span>
             <span class="badge"><b>Liq:</b> ${round2(p.liq)}</span>
             <span class="badge"><b>Vol:</b> ${round2(p.vol)}</span>
           </div>
           <div class="smallnote" style="margin-top:8px;">
-            Reasoning: strongest net “winner” exposure to kept catalysts, with liq/vol profile suited for a 15–20 day reaction window.
+            Reasoning: strongest absolute sensitivity to current catalysts (signed weights). Positive suggests “beneficiary”; negative suggests “headwind”.
           </div>
           ${drivers ? `<div style="margin-top:8px;"><div class="sub"><b>Top drivers:</b></div>${drivers}</div>` : ""}
         </div>
       `;
     }).join("");
+
+    el.viewPicks.innerHTML = preface + cards;
   }
 
   function renderHeadlines(scan){
@@ -745,6 +768,7 @@
               <span class="badge"><b>Clarity:</b> ${round2(h.clarity)}</span>
               <span class="badge"><b>Timing:</b> ${round2(h.timing)}</span>
               <span class="badge"><b>Shock:</b> ${round2(h.shock)}</span>
+              <span class="badge"><b>TopicKey:</b> ${escapeHtml(h.topicKey)}</span>
             </div>
             <div class="smallnote mono" style="margin-top:8px; word-break:break-word;">${escapeHtml(h.url)}</div>
           </div>
@@ -770,20 +794,23 @@
 
   function renderTickers(scan){
     const rows = (scan.tickerTable || []).slice(0, 40).map(x => {
+      const dirDot = x.score >= 0 ? "ok" : "bad";
+      const bias = x.score >= 0 ? "winner bias" : "loser bias";
       return `
         <div class="item">
           <div class="title">${escapeHtml(x.ticker)} <span class="badge">${escapeHtml(x.group)}</span></div>
           <div class="sub">
-            <span class="badge"><b>Score:</b> ${x.score100}/100</span>
+            <span class="badge"><span class="dot ${dirDot}"></span><b>Abs score:</b> ${x.score100}/100</span>
+            <span class="badge"><b>Bias:</b> ${bias}</span>
             <span class="badge"><b>ETF:</b> ${x.isEtf ? "yes" : "no"}</span>
             <span class="badge"><b>Liq:</b> ${round2(x.liq)}</span>
             <span class="badge"><b>Vol:</b> ${round2(x.vol)}</span>
           </div>
           ${x.drivers?.length ? `
             <div class="smallnote" style="margin-top:8px;">
-              Drivers: ${x.drivers.map(d => `${escapeHtml(d.topicKey)} (+${round2(d.add)})${d.soft ? " [soft]" : ""}`).join(", ")}
+              Drivers: ${x.drivers.map(d => `${escapeHtml(d.topicKey)} (${d.add>=0?"+":""}${round2(d.add)})${d.soft ? " [soft]" : ""}`).join(", ")}
             </div>
-          ` : `<div class="smallnote" style="margin-top:8px;">No strong positive drivers detected.</div>`}
+          ` : `<div class="smallnote" style="margin-top:8px;">No drivers stored.</div>`}
         </div>
       `;
     }).join("");
@@ -792,7 +819,7 @@
 
   function renderAll(scan){
     el.meta.textContent =
-      `Scan @ ${fmtDate(new Date(scan.createdAt), scan.opts.tz)} | raw: ${scan.countRaw} | kept: ${scan.countKept} | strong: ${scan.strongCatalysts} | avg: ${round2(scan.avgTrade01)} | strict: ${scan.strictnessPct}%`;
+      `Scan @ ${fmtDate(new Date(scan.createdAt), scan.opts.tz)} | raw: ${scan.countRaw} | kept: ${scan.countKept} | strong: ${scan.strongCatalysts} | avgTopK: ${round2(scan.avgTrade01)} | avgAll: ${round2(scan.avgAllTrade01)} | strict: ${scan.strictnessPct}% | ideaMode: ${scan.ideaMode ? "ON" : "OFF"}`;
     renderPicks(scan);
     renderHeadlines(scan);
     renderTickers(scan);
@@ -800,7 +827,7 @@
   }
 
   // ---------- History ----------
-  const STORAGE_KEY = "trade_scanner_history_v3";
+  const STORAGE_KEY = "trade_scanner_history_v4";
 
   function loadHistory(){
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -827,7 +854,7 @@
       o.value = String(i);
       const dt = new Date(s.createdAt);
       const top = (s.topPicks || []).map(x=>x.ticker).join(", ");
-      o.textContent = `${i+1}) ${dt.toLocaleString()} | Top: ${top || (s.noTrade ? "NO TRADE" : "—")}`;
+      o.textContent = `${i+1}) ${dt.toLocaleString()} | ${s.noTrade ? "NO TRADE" : "Top: " + (top || "—")}`;
       el.history.appendChild(o);
     }
   }
@@ -859,6 +886,7 @@
       ["perTopic", opts.perTopic],
       ["concurrency", opts.concurrency],
       ["strictness", `${Math.round(RUNTIME.strictness*100)}%`],
+      ["ideaMode", RUNTIME.ideaMode ? "ON" : "OFF"],
       ["minStrong", RUNTIME.minCatalysts],
       ["minAvg", RUNTIME.minAvgTrade01.toFixed(2)],
       ["liqFloor", RUNTIME.liqFloor.toFixed(2)],
@@ -931,19 +959,42 @@
 
     const tickerTable = aggregateTickerScores(keptAll);
 
-    const strongCatalysts = keptAll.filter(h => h.score10 >= 7 && h.clarity >= 0.55 && !h.soft).length;
-    const avgTrade01 = keptAll.length ? (keptAll.reduce((s,h)=>s + (h.trade01 || 0), 0) / keptAll.length) : 0;
+    // Dynamic "strong" thresholds based on strictness
+    const strongScoreCut =
+      (RUNTIME.strictness >= 0.70) ? 7 :
+      (RUNTIME.strictness >= 0.45) ? 6 : 5;
+
+    const strongClarityCut =
+      (RUNTIME.strictness >= 0.70) ? 0.55 :
+      (RUNTIME.strictness >= 0.45) ? 0.45 : 0.35;
+
+    const strongCatalysts = keptAll.filter(h =>
+      h.score10 >= strongScoreCut &&
+      h.clarity >= strongClarityCut &&
+      (RUNTIME.strictness >= 0.45 ? !h.soft : true)
+    ).length;
+
+    // Average ONLY the top-K tradeability headlines to prevent dilution
+    const K = Math.min(12, keptAll.length);
+    const topK = keptAll.slice().sort((a,b)=>(b.trade01||0)-(a.trade01||0)).slice(0, K);
+    const avgTrade01 = K ? (topK.reduce((s,h)=>s + (h.trade01 || 0), 0) / K) : 0;
+    const avgAllTrade01 = keptAll.length ? (keptAll.reduce((s,h)=>s + (h.trade01 || 0), 0) / keptAll.length) : 0;
 
     let noTrade = false;
     let topPicks = [];
 
     if(keptAll.length === 0){
       noTrade = true;
-    } else if(strongCatalysts < RUNTIME.minCatalysts || avgTrade01 < RUNTIME.minAvgTrade01){
+    } else if(!RUNTIME.ideaMode && (strongCatalysts < RUNTIME.minCatalysts || avgTrade01 < RUNTIME.minAvgTrade01)){
       noTrade = true;
     } else {
       topPicks = tickerTable.slice(0,3);
-      if(topPicks.length && topPicks[0].score <= 0) noTrade = true;
+
+      // Enforce positive winner score only when not in idea mode
+      if(!RUNTIME.ideaMode && topPicks.length && topPicks[0].score <= 0) noTrade = true;
+
+      // In idea mode, always show picks
+      if(noTrade && RUNTIME.ideaMode) noTrade = false;
       if(noTrade) topPicks = [];
     }
 
@@ -955,10 +1006,12 @@
       countKept: keptAll.length,
       strongCatalysts,
       avgTrade01,
+      avgAllTrade01,
       noTrade,
       tickerTable,
       topPicks,
-      strictnessPct: Math.round(RUNTIME.strictness * 100)
+      strictnessPct: Math.round(RUNTIME.strictness * 100),
+      ideaMode: RUNTIME.ideaMode
     };
 
     lastScan = scan;
@@ -966,7 +1019,9 @@
     if(countRaw === 0){
       setStatus("No headlines returned. Try a longer lookback or remove filters.", true);
     } else if(scan.noTrade){
-      setStatus(`NO TRADE: gates not met (strong=${scan.strongCatalysts}, avg=${round2(scan.avgTrade01)}, kept=${scan.countKept}, strict=${scan.strictnessPct}%).`, true);
+      setStatus(`NO TRADE: gates not met (strong=${scan.strongCatalysts}, avgTopK=${round2(scan.avgTrade01)}, kept=${scan.countKept}, strict=${scan.strictnessPct}%).`, true);
+    } else if(scan.ideaMode){
+      setStatus(`IDEA MODE ON: picks forced (strict=${scan.strictnessPct}%). Treat as low conviction.`);
     } else {
       const errCount = scoredByTopic.filter(x=>x.error).length;
       setStatus(errCount ? `Completed with ${errCount} topic errors (see Headlines tab).` : "Completed.");
