@@ -57,6 +57,7 @@
     .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;}
     .smallnote{font-size:12px;color:var(--muted);line-height:1.35;margin-top:10px;}
     .hr{height:1px;background:var(--border);margin:10px 0;}
+    .rangeWrap{display:grid;grid-template-columns:1fr 90px;gap:10px;align-items:center;}
   </style>
 </head>
 
@@ -115,6 +116,15 @@
       </div>
     </div>
 
+    <label>Strictness / Sensitivity</label>
+    <div class="rangeWrap">
+      <input id="strictness" type="range" min="0" max="100" value="70" />
+      <input id="strictnessNum" type="number" min="0" max="100" value="70" />
+    </div>
+    <div class="smallnote" id="strictnessHint">
+      70 = strict (more NO TRADE). Lower = more trades (lower confidence).
+    </div>
+
     <label>Optional filters (applied to all topics)</label>
     <div class="row">
       <input id="lang" placeholder="sourcelang (e.g. english)" />
@@ -138,8 +148,8 @@
     <div id="pills" class="pillbar"></div>
 
     <div class="smallnote">
-      This version tries to mimic “GPT rules” without paid APIs by using: catalyst filtering, signed winner/loser weights,
-      liquidity gating, ETF preference, and a NO TRADE decision.
+      This version mimics “GPT rules” without paid APIs by using catalyst filtering, signed winner/loser weights,
+      liquidity gating, ETF preference, and a NO TRADE decision. Use Strictness to relax gates.
     </div>
 
     <div class="hr"></div>
@@ -187,20 +197,12 @@
     gold: ["GLD","IAU","GDX"]
   };
 
-  // ETF set used for “prefer ETFs” behavior
   const ETF_SET = new Set([
     "PPA","ITA","CIBR","HACK","SMH","SOXX",
     "XLE","XOP","OIH","KIE","URNM","URA",
     "PHO","MOO","DBA","GLD","IAU","GDX"
   ]);
 
-  // GPT-like discipline tuning (free-only)
-  const GPT_PREF_ETF_BONUS = 1.12;
-  const GPT_LIQ_FLOOR = 0.55;
-  const NO_TRADE_MIN_CATALYSTS = 2;
-  const NO_TRADE_MIN_AVG_TRADE01 = 0.58;
-
-  // Topics + query term bundles
   const TOPICS = [
     { key:"geopolitics", label:"geopolitics", terms:['geopolitics','"regional tensions"','"border clash"','"military buildup"','"diplomatic crisis"'] },
     { key:"sanctions", label:"sanctions", terms:['sanctions','"export controls"','"blacklist"','"secondary sanctions"','"asset freeze"'] },
@@ -219,7 +221,6 @@
     { key:"oil", label:"oil", terms:['"crude oil"','Brent','WTI','"oil prices"','"oil supply"'] }
   ];
 
-  // Signed winner/loser weights (long-only output but losers are penalized in ranking)
   const TOPIC_SECTOR_WEIGHTS = {
     geopolitics: { defense:+0.80, energy:+0.55, shipping:+0.20, gold:+0.40, insurers:-0.10, semis:-0.05, cyber:+0.10 },
     sanctions:   { energy:+0.30, shipping:+0.20, defense:+0.20, semis:-0.25, gold:+0.25 },
@@ -246,7 +247,6 @@
     oil:         { energy:+0.75, shipping:+0.10, gold:+0.05 }
   };
 
-  // Heuristic Liquidity scores (0..1). Edit freely.
   const LIQ = Object.fromEntries([
     ["PPA",0.75],["ITA",0.8],["CIBR",0.8],["HACK",0.7],["SMH",0.85],["SOXX",0.85],
     ["XLE",0.9],["XOP",0.75],["OIH",0.6],["KIE",0.65],["URNM",0.55],["URA",0.65],
@@ -257,7 +257,6 @@
     ["ZIM",0.6],["DAC",0.45],["UEC",0.45],["LEU",0.45]
   ]);
 
-  // Heuristic Volatility scores (0..1). Edit freely.
   const VOL = Object.fromEntries([
     ["NVDA",0.9],["AMD",0.85],["ARM",0.85],["MRVL",0.8],["MU",0.85],
     ["XOP",0.8],["OIH",0.85],["HAL",0.75],["SLB",0.7],
@@ -278,6 +277,9 @@
     perTopic: document.getElementById("perTopic"),
     concurrency: document.getElementById("concurrency"),
     tz: document.getElementById("tz"),
+    strictness: document.getElementById("strictness"),
+    strictnessNum: document.getElementById("strictnessNum"),
+    strictnessHint: document.getElementById("strictnessHint"),
     lang: document.getElementById("lang"),
     country: document.getElementById("country"),
     customQuery: document.getElementById("customQuery"),
@@ -296,6 +298,34 @@
   };
 
   let lastScan = null;
+
+  // ---------- Runtime tuning (Strictness) ----------
+  const RUNTIME = {
+    strictness: 0.70,   // 0..1
+    liqFloor: 0.55,     // dynamic
+    etfBonus: 1.12,     // dynamic
+    minCatalysts: 2,    // dynamic
+    minAvgTrade01: 0.58 // dynamic
+  };
+
+  function applyStrictnessFromUI(){
+    const v = Math.max(0, Math.min(100, Number(el.strictness.value || 70)));
+    el.strictness.value = String(v);
+    el.strictnessNum.value = String(v);
+
+    const s = v / 100;
+    RUNTIME.strictness = s;
+
+    // Relax as strictness falls
+    RUNTIME.liqFloor = 0.45 + s * (0.55 - 0.45);           // 0.45..0.55
+    RUNTIME.etfBonus = 1.06 + s * (1.12 - 1.06);           // 1.06..1.12
+    RUNTIME.minCatalysts = Math.round(1 + s * 1);          // 1..2
+    RUNTIME.minAvgTrade01 = 0.40 + s * (0.58 - 0.40);      // 0.40..0.58
+
+    const label = v >= 70 ? "strict" : v >= 45 ? "balanced" : "lenient";
+    el.strictnessHint.textContent =
+      `${v} = ${label} | minStrong=${RUNTIME.minCatalysts}, minAvg=${RUNTIME.minAvgTrade01.toFixed(2)}, liqFloor=${RUNTIME.liqFloor.toFixed(2)}, ETFbonus=${RUNTIME.etfBonus.toFixed(2)}`;
+  }
 
   // ---------- Helpers ----------
   const clamp01 = (x) => Math.max(0, Math.min(1, x));
@@ -362,10 +392,11 @@
     return results;
   }
 
-  // ---------- GPT-like catalyst logic ----------
+  // ---------- Catalyst logic ----------
   function isCatalystHeadline(title){
     const t = (title || "").toLowerCase();
 
+    // Always reject obvious non-catalyst formats
     const hardReject = [
       "what you need to know","explainer","analysis","opinion","live updates","recap",
       "how to","watch live","timeline","faq"
@@ -385,7 +416,15 @@
     ];
     const hasStrong = strongTerms.some(w => t.includes(w));
 
-    return hasNumber || hasStrong;
+    if(hasNumber || hasStrong) return true;
+
+    // Lenient mode: allow “weak but relevant” topic mentions
+    if(RUNTIME.strictness <= 0.45){
+      const topicWords = ["sanction","ceasefire","tariff","cyber","earthquake","flood","wildfire","inflation","recession","opec","oil","war","strike"];
+      if(topicWords.some(w => t.includes(w))) return true;
+    }
+
+    return false;
   }
 
   function effectiveTopicKey(topicKey, title){
@@ -406,7 +445,6 @@
     return topicKey;
   }
 
-  // “Clarity”: how actionable/specific
   function catalystClarity(title){
     const t = (title || "").toLowerCase();
     let score = 0.20;
@@ -474,19 +512,26 @@
     const timing  = timingScore(seenDate, nowUtc);
 
     if(!isCatalystHeadline(title)){
-      return { trade01: 0.0, score10: 1, clarity, timing, shock: 0, filteredOut: true };
+      // Strict mode: drop it
+      if(RUNTIME.strictness >= 0.70){
+        return { trade01: 0.0, score10: 1, clarity, timing, shock: 0, filteredOut: true, soft:false };
+      }
+      // Lenient mode: keep it, but low-confidence
+      const shock = shockScore(title, topicKey);
+      const raw = clamp01(0.20 * clarity + 0.35 * timing + 0.45 * shock) * 0.55;
+      const score10 = Math.max(1, Math.min(10, Math.round(raw * 10)));
+      return { trade01: raw, score10, clarity, timing, shock, filteredOut: false, soft:true };
     }
 
     const shock = shockScore(title, topicKey);
     const raw = clamp01(0.45 * clarity + 0.25 * timing + 0.30 * shock);
     const score10 = Math.max(1, Math.min(10, Math.round(raw * 10)));
-    return { trade01: raw, score10, clarity, timing, shock, filteredOut: false };
+    return { trade01: raw, score10, clarity, timing, shock, filteredOut: false, soft:false };
   }
 
   function tickerLiquidity(t){ return LIQ[t] ?? DEFAULT_LIQ; }
   function tickerVol(t){ return VOL[t] ?? DEFAULT_VOL; }
 
-  // Aggregate tickers using signed weights, liquidity gating, ETF preference
   function aggregateTickerScores(allHeadlines){
     const tickerInfo = {};
     const tickerToGroup = {};
@@ -519,23 +564,23 @@
           const info = ensure(t);
 
           // Eligibility: keep ETFs; for stocks enforce liquidity floor
-          if(!info.isEtf && info.liq < GPT_LIQ_FLOOR) continue;
+          if(!info.isEtf && info.liq < RUNTIME.liqFloor) continue;
 
           const lv = 0.65 * info.liq + 0.35 * info.vol;
           let add = base * w * lv;
 
-          if(info.isEtf) add *= GPT_PREF_ETF_BONUS;
+          if(info.isEtf) add *= RUNTIME.etfBonus;
 
           info.score += add;
 
-          // Only store positive drivers (what a long trade benefits from)
           if(add > 0.030){
             info.drivers.push({
               add,
               topicKey: h.topicKey,
               title: h.title,
               url: h.url,
-              seenDate: h.seenDate
+              seenDate: h.seenDate,
+              soft: !!h.soft
             });
           }
         }
@@ -543,9 +588,8 @@
     }
 
     const arr = Object.values(tickerInfo);
-
-    // If negatives exist, normalize against max positive so UI is stable
     const maxPos = Math.max(0.0001, ...arr.map(x => x.score));
+
     for(const x of arr){
       x.scoreN = x.score / maxPos;
       x.score100 = Math.round(x.scoreN * 100);
@@ -602,20 +646,19 @@
   function renderMethod(){
     el.viewMethod.innerHTML = `
       <div class="item">
-        <div class="title">Method (Free-only GPT-like rules)</div>
+        <div class="title">Method (Free-only GPT-like rules + Strictness)</div>
         <div class="smallnote">
-          Headlines are filtered to keep only likely price-moving catalysts (actionable, specific, time-relevant).
-          Each kept headline gets a <b>Tradeability</b> score (1–10) derived from:
+          Headlines are filtered for likely price-moving catalysts. Strictness controls how hard the filter and “NO TRADE” gates are.
+          Tradeability (1–10) comes from:
         </div>
         <div class="scoreline">
           <span class="badge"><span class="dot ok"></span><b>Clarity</b> (numbers, actions, institutions)</span>
-          <span class="badge"><span class="dot ok"></span><b>Timing</b> (recency decay; tuned for ~15–20 trading days)</span>
-          <span class="badge"><span class="dot ok"></span><b>Shock</b> (keyword intensity per topic)</span>
+          <span class="badge"><span class="dot ok"></span><b>Timing</b> (recency decay)</span>
+          <span class="badge"><span class="dot ok"></span><b>Shock</b> (keyword intensity)</span>
         </div>
         <div class="smallnote">
-          Ticker ranking uses <b>signed winner/loser sector weights</b>, applies a <b>liquidity floor</b> (drop illiquid stocks),
-          and adds a small <b>ETF preference bonus</b> to mimic “prefer event-driven ETFs”.
-          The scanner can output <b>NO TRADE</b> if catalysts are not clean enough.
+          Ticker ranking uses signed winner/loser sector weights, liquidity gating, and an ETF preference bonus.
+          At low strictness, the system may keep weaker headlines as “soft” catalysts to propose ideas.
         </div>
       </div>
     `;
@@ -629,11 +672,11 @@
           <div class="sub">
             <span class="badge"><span class="dot bad"></span><b>Strong catalysts:</b> ${scan.strongCatalysts}</span>
             <span class="badge"><b>Avg tradeability:</b> ${round2(scan.avgTrade01)}</span>
-            <span class="badge"><b>Filtered headlines kept:</b> ${scan.countKept}</span>
+            <span class="badge"><b>Kept catalysts:</b> ${scan.countKept}</span>
+            <span class="badge"><b>Strictness:</b> ${scan.strictnessPct}%</span>
           </div>
           <div class="smallnote" style="margin-top:8px;">
-            Not enough clean, time-bounded shocks to justify a short-term event-driven trade under disciplined rules.
-            Try a longer lookback, remove filters, or rerun later.
+            Reduce Strictness to force more trade ideas (with lower confidence), or increase lookback.
           </div>
         </div>
       `;
@@ -651,9 +694,11 @@
     el.viewPicks.innerHTML = picks.map((p, idx) => {
       const drivers = (p.drivers || []).map(d => {
         const when = d.seenDate ? fmtDate(new Date(d.seenDate), tz) : "";
+        const soft = d.soft ? `<span class="badge"><span class="dot bad"></span>soft</span>` : "";
         return `
           <div class="sub" style="margin-top:6px;">
             <span class="badge"><span class="dot ok"></span>+${round2(d.add)} driver</span>
+            ${soft}
             <span>${escapeHtml(d.topicKey)}</span>
             <a href="${escapeHtml(d.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(d.title)}</a>
             <span>${escapeHtml(when)}</span>
@@ -671,7 +716,7 @@
             <span class="badge"><b>Vol:</b> ${round2(p.vol)}</span>
           </div>
           <div class="smallnote" style="margin-top:8px;">
-            Reasoning: strongest net “winner” exposure to filtered tradable catalysts, with liquidity/vol profile suitable for a 15–20 day reaction window.
+            Reasoning: strongest net “winner” exposure to kept catalysts, with liq/vol profile suited for a 15–20 day reaction window.
           </div>
           ${drivers ? `<div style="margin-top:8px;"><div class="sub"><b>Top drivers:</b></div>${drivers}</div>` : ""}
         </div>
@@ -686,6 +731,7 @@
       const items = (t.items || []).map(h => {
         const when = h.seenDate ? fmtDate(new Date(h.seenDate), tz) : "";
         const dotClass = h.score10 >= 7 ? "ok" : (h.score10 <= 3 ? "bad" : "");
+        const soft = h.soft ? `<span class="badge"><span class="dot bad"></span>soft</span>` : "";
         return `
           <div class="item">
             <div class="title">
@@ -695,6 +741,7 @@
               <span>${escapeHtml(h.domain || "")}</span>
               <span>${escapeHtml(when)}</span>
               <span class="badge"><span class="dot ${dotClass}"></span><b>Tradeability:</b> ${h.score10}/10</span>
+              ${soft}
               <span class="badge"><b>Clarity:</b> ${round2(h.clarity)}</span>
               <span class="badge"><b>Timing:</b> ${round2(h.timing)}</span>
               <span class="badge"><b>Shock:</b> ${round2(h.shock)}</span>
@@ -734,7 +781,7 @@
           </div>
           ${x.drivers?.length ? `
             <div class="smallnote" style="margin-top:8px;">
-              Drivers: ${x.drivers.map(d => `${escapeHtml(d.topicKey)} (+${round2(d.add)})`).join(", ")}
+              Drivers: ${x.drivers.map(d => `${escapeHtml(d.topicKey)} (+${round2(d.add)})${d.soft ? " [soft]" : ""}`).join(", ")}
             </div>
           ` : `<div class="smallnote" style="margin-top:8px;">No strong positive drivers detected.</div>`}
         </div>
@@ -745,7 +792,7 @@
 
   function renderAll(scan){
     el.meta.textContent =
-      `Scan @ ${fmtDate(new Date(scan.createdAt), scan.opts.tz)} | raw: ${scan.countRaw} | kept: ${scan.countKept} | strong: ${scan.strongCatalysts} | avg: ${round2(scan.avgTrade01)}`;
+      `Scan @ ${fmtDate(new Date(scan.createdAt), scan.opts.tz)} | raw: ${scan.countRaw} | kept: ${scan.countKept} | strong: ${scan.strongCatalysts} | avg: ${round2(scan.avgTrade01)} | strict: ${scan.strictnessPct}%`;
     renderPicks(scan);
     renderHeadlines(scan);
     renderTickers(scan);
@@ -753,7 +800,7 @@
   }
 
   // ---------- History ----------
-  const STORAGE_KEY = "trade_scanner_history_v2";
+  const STORAGE_KEY = "trade_scanner_history_v3";
 
   function loadHistory(){
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -792,6 +839,8 @@
     el.saveBtn.disabled = true;
     el.exportBtn.disabled = true;
 
+    applyStrictnessFromUI();
+
     const nowUtc = new Date();
     const opts = {
       timespan: el.timespan.value,
@@ -809,10 +858,13 @@
       ["sort", opts.sort || "relevance"],
       ["perTopic", opts.perTopic],
       ["concurrency", opts.concurrency],
+      ["strictness", `${Math.round(RUNTIME.strictness*100)}%`],
+      ["minStrong", RUNTIME.minCatalysts],
+      ["minAvg", RUNTIME.minAvgTrade01.toFixed(2)],
+      ["liqFloor", RUNTIME.liqFloor.toFixed(2)],
+      ["ETFbonus", RUNTIME.etfBonus.toFixed(2)],
       ["sourcelang", opts.lang || "—"],
-      ["sourcecountry", opts.country || "—"],
-      ["liqFloor", GPT_LIQ_FLOOR],
-      ["ETF bonus", GPT_PREF_ETF_BONUS]
+      ["sourcecountry", opts.country || "—"]
     ]);
 
     setStatus("Fetching headlines from GDELT…");
@@ -833,7 +885,6 @@
       return;
     }
 
-    // Normalize & filter headlines
     const keptAll = [];
     let countRaw = 0;
 
@@ -848,17 +899,20 @@
         const seenDate = parseGdeltSeenDate(a.seendate || a.seenDate || "");
 
         const effKey = effectiveTopicKey(t.topicKey, title);
-        const { trade01, score10, clarity, timing, shock, filteredOut } =
-          headlineTradeability({ topicKey: effKey, title, seenDate }, nowUtc);
-
-        if(filteredOut) return null;
+        const r = headlineTradeability({ topicKey: effKey, title, seenDate }, nowUtc);
+        if(r.filteredOut) return null;
 
         const h = {
           topicKey: effKey,
           topicLabel: t.topicLabel,
           title, url, domain,
           seenDate: seenDate ? seenDate.toISOString() : null,
-          trade01, score10, clarity, timing, shock
+          trade01: r.trade01,
+          score10: r.score10,
+          clarity: r.clarity,
+          timing: r.timing,
+          shock: r.shock,
+          soft: r.soft
         };
         keptAll.push(h);
         return h;
@@ -875,9 +929,9 @@
       };
     });
 
-    // Ticker aggregation
     const tickerTable = aggregateTickerScores(keptAll);
-    const strongCatalysts = keptAll.filter(h => h.score10 >= 7 && h.clarity >= 0.55).length;
+
+    const strongCatalysts = keptAll.filter(h => h.score10 >= 7 && h.clarity >= 0.55 && !h.soft).length;
     const avgTrade01 = keptAll.length ? (keptAll.reduce((s,h)=>s + (h.trade01 || 0), 0) / keptAll.length) : 0;
 
     let noTrade = false;
@@ -885,11 +939,10 @@
 
     if(keptAll.length === 0){
       noTrade = true;
-    } else if(strongCatalysts < NO_TRADE_MIN_CATALYSTS || avgTrade01 < NO_TRADE_MIN_AVG_TRADE01){
+    } else if(strongCatalysts < RUNTIME.minCatalysts || avgTrade01 < RUNTIME.minAvgTrade01){
       noTrade = true;
     } else {
       topPicks = tickerTable.slice(0,3);
-      // If top scores are non-positive, avoid forced picks
       if(topPicks.length && topPicks[0].score <= 0) noTrade = true;
       if(noTrade) topPicks = [];
     }
@@ -904,16 +957,16 @@
       avgTrade01,
       noTrade,
       tickerTable,
-      topPicks
+      topPicks,
+      strictnessPct: Math.round(RUNTIME.strictness * 100)
     };
 
     lastScan = scan;
 
-    // Status
     if(countRaw === 0){
       setStatus("No headlines returned. Try a longer lookback or remove filters.", true);
     } else if(scan.noTrade){
-      setStatus(`NO TRADE: catalysts not clean enough (strong=${scan.strongCatalysts}, avg=${round2(scan.avgTrade01)}, kept=${scan.countKept}).`, true);
+      setStatus(`NO TRADE: gates not met (strong=${scan.strongCatalysts}, avg=${round2(scan.avgTrade01)}, kept=${scan.countKept}, strict=${scan.strictnessPct}%).`, true);
     } else {
       const errCount = scoredByTopic.filter(x=>x.error).length;
       setStatus(errCount ? `Completed with ${errCount} topic errors (see Headlines tab).` : "Completed.");
@@ -969,20 +1022,29 @@
   document.querySelectorAll(".tab").forEach(t=>{
     t.addEventListener("click", () => setActiveTab(t.dataset.tab));
   });
+
   el.runBtn.addEventListener("click", runScan);
   el.saveBtn.addEventListener("click", saveCurrent);
   el.exportBtn.addEventListener("click", exportJson);
   el.clearHistoryBtn.addEventListener("click", clearHistory);
+
   el.history.addEventListener("change", () => {
     const v = el.history.value;
     if(!v) return;
     loadFromHistoryIndex(Number(v));
   });
 
+  el.strictness.addEventListener("input", applyStrictnessFromUI);
+  el.strictnessNum.addEventListener("change", () => {
+    el.strictness.value = el.strictnessNum.value;
+    applyStrictnessFromUI();
+  });
+
   // Init
   refreshHistoryDropdown();
   setActiveTab("picks");
   renderMethod();
+  applyStrictnessFromUI();
 })();
 </script>
 </body>
