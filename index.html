@@ -9,7 +9,7 @@
       --bg:#0b0f17; --panel:#0e162a; --panel2:#0b1020;
       --border:#1d2a44; --border2:#233357;
       --text:#e8eefc; --muted:rgba(232,238,252,.72);
-      --accent:#2a5cff; --bad:#ff8080; --ok:#93ffb4;
+      --accent:#2a5cff; --bad:#ff8080; --ok:#93ffb4; --warn:#ffd480;
       font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
     }
     body{margin:0;background:var(--bg);color:var(--text);}
@@ -54,10 +54,21 @@
     .dot{width:8px;height:8px;border-radius:999px;background:var(--muted);display:inline-block;}
     .dot.ok{background:var(--ok);}
     .dot.bad{background:var(--bad);}
+    .dot.warn{background:var(--warn);}
     .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;}
     .smallnote{font-size:12px;color:var(--muted);line-height:1.35;margin-top:10px;}
     .hr{height:1px;background:var(--border);margin:10px 0;}
     .rangeWrap{display:grid;grid-template-columns:1fr 90px;gap:10px;align-items:center;}
+    .miniGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;}
+    .miniGrid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px;}
+    .kpi{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;}
+    .muted{color:var(--muted);}
+    .planBox{margin-top:10px;border:1px solid var(--border2);background:#081022;border-radius:14px;padding:10px;}
+    .planBox h3{margin:0 0 6px;font-size:13px;}
+    .planLine{display:flex;flex-wrap:wrap;gap:8px;font-size:12px;color:var(--muted);margin-top:6px;}
+    .planLine b{color:var(--text);font-weight:800;}
+    .warnText{color:var(--warn);}
+    .badText{color:var(--bad);}
   </style>
 </head>
 
@@ -65,8 +76,9 @@
 <header>
   <h1>Speculative Trade Advisor (Free, GDELT)</h1>
   <p>
-    Free-only, deterministic scanner: fetches headlines (GDELT DOC 2.0), filters for tradable catalysts, scores tradeability (1–10),
-    and ranks 3 candidates for a ~15–20 trading day event window. Research tool only.
+    Free-only, deterministic scanner: fetches English headlines (GDELT DOC 2.0), filters for tradable catalysts, scores tradeability (1–10),
+    ranks 3 candidates for a ~15–20 trading day event window, and prints a disciplined trade plan with fees/tax math (manual price input).
+    Research tool only — not investment advice.
   </p>
 </header>
 
@@ -123,14 +135,14 @@
     </div>
     <div class="smallnote" id="strictnessHint"></div>
 
-    <label>Optional filters (applied to all topics)</label>
-    <div class="row">
-      <input id="lang" placeholder="sourcelang (e.g. english)" />
-      <input id="country" placeholder="sourcecountry (e.g. unitedstates)" />
-    </div>
+    <label>Source language (locked)</label>
+    <input id="langLocked" value="english" disabled />
+
+    <label>Optional filter (applied to all topics)</label>
+    <input id="country" placeholder="sourcecountry (e.g. unitedstates)" />
 
     <label>Optional: custom topic query override (advanced)</label>
-    <textarea id="customQuery" placeholder='Leave blank. Example: ("sanctions" OR "export controls") sourcelang:english'></textarea>
+    <textarea id="customQuery" placeholder='Leave blank. Example: ("sanctions" OR "export controls")'></textarea>
 
     <div class="actions">
       <button id="runBtn" class="primary">Run Scan</button>
@@ -146,8 +158,8 @@
     <div id="pills" class="pillbar"></div>
 
     <div class="smallnote">
-      Strictness controls: catalyst filter hardness, liquidity gate, ETF preference bonus, “NO TRADE” gates, and whether “Idea Mode” is enabled.
-      At very low strictness, the app will output ideas even if conviction is low.
+      Discipline layer assumes: $1,000–$2,000 per trade, one active trade at a time, LIMIT entry,
+      OCO exits (TP/SL), and time-stop exits. You manually input the current price per ticker to compute the plan.
     </div>
 
     <div class="hr"></div>
@@ -182,6 +194,20 @@
 (() => {
   // ---------- Constants ----------
   const GDELT_ENDPOINT = "https://api.gdeltproject.org/api/v2/doc/doc";
+
+  // Trading discipline constants (Israel)
+  const FEES_PER_EXECUTED_ORDER_USD = 8;
+  const CAPITAL_GAINS_TAX = 0.25;
+
+  // Timeboxes (trading days)
+  const ETF_TIMEBOX_TD = 18;     // within 15–20
+  const STOCK_TIMEBOX_TD = 12;   // within 10–15
+  const REVIEW1_TD = 6;          // day 5–7
+  const REVIEW2_FRACTION = 2/3;  // ~day 10 / 2/3 timebox
+
+  // Entry pullback (from user suggestion)
+  const ETF_PULLBACK = 0.003;   // -0.3%
+  const STOCK_PULLBACK = 0.007; // -0.7%
 
   const TICKER_GROUPS = {
     defense: ["PPA","ITA","LMT","NOC","GD","RTX","BA","HII","LHX","TDG","AVAV","KTOS"],
@@ -219,7 +245,7 @@
     { key:"oil", label:"oil", terms:['"crude oil"','Brent','WTI','"oil prices"','"oil supply"'] }
   ];
 
-  // Signed sector effects: + means likely winners, - means likely losers (long-only focus).
+  // Signed sector effects: + likely winners, - likely losers.
   const TOPIC_SECTOR_WEIGHTS = {
     geopolitics: { defense:+0.80, energy:+0.55, shipping:+0.20, gold:+0.40, insurers:-0.10, semis:-0.05, cyber:+0.10 },
     sanctions:   { energy:+0.30, shipping:+0.20, defense:+0.20, semis:-0.25, gold:+0.25 },
@@ -279,7 +305,6 @@
     strictness: document.getElementById("strictness"),
     strictnessNum: document.getElementById("strictnessNum"),
     strictnessHint: document.getElementById("strictnessHint"),
-    lang: document.getElementById("lang"),
     country: document.getElementById("country"),
     customQuery: document.getElementById("customQuery"),
     runBtn: document.getElementById("runBtn"),
@@ -321,8 +346,6 @@
     RUNTIME.etfBonus = 1.03 + s * (1.12 - 1.03);           // 1.03..1.12
     RUNTIME.minCatalysts = Math.round(s * 2);              // 0..2
     RUNTIME.minAvgTrade01 = 0.20 + s * (0.58 - 0.20);      // 0.20..0.58
-
-    // Idea mode: at very low strictness, always output picks (with warning)
     RUNTIME.ideaMode = (s <= 0.15);
 
     const label = v >= 70 ? "strict" : v >= 45 ? "balanced" : "lenient";
@@ -365,10 +388,26 @@
     }
   }
 
-  function buildQueryFromTerms(terms, lang, country){
+  // Add trading days (Mon–Fri), ignoring holidays (good enough for a planning tool)
+  function addTradingDays(startDate, tradingDays){
+    const d = new Date(startDate.getTime());
+    let remaining = Math.max(0, Math.floor(tradingDays));
+    while(remaining > 0){
+      d.setDate(d.getDate() + 1);
+      const day = d.getDay(); // 0 Sun..6 Sat
+      if(day !== 0 && day !== 6) remaining--;
+    }
+    return d;
+  }
+
+  function forceEnglishQuery(q){
+    const hasLang = /sourcelang\s*:/i.test(q);
+    return hasLang ? q : (q.trim() + " sourcelang:english");
+  }
+
+  function buildQueryFromTerms(terms, country){
     const core = "(" + terms.join(" OR ") + ")";
-    let q = core;
-    if(lang) q += ` sourcelang:${lang}`;
+    let q = core + " sourcelang:english";
     if(country) q += ` sourcecountry:${country}`;
     return q.trim();
   }
@@ -401,7 +440,7 @@
   function isCatalystHeadline(title){
     const t = (title || "").toLowerCase();
 
-    // Always reject obvious non-catalyst formats
+    // Reject obvious non-catalyst formats
     const hardReject = [
       "what you need to know","explainer","analysis","opinion","live updates","recap",
       "how to","watch live","timeline","faq"
@@ -409,7 +448,6 @@
     if(hardReject.some(w => t.includes(w))) return false;
 
     const hasNumber = /(\d+(\.\d+)?)|(%|\$|bps|basis points|million|billion|mbpd)/i.test(title || "");
-
     const strongTerms = [
       "announces","imposes","approves","bans","ban","halts","suspends","launches",
       "cuts","raises","hikes","slashes","sanctions","tariff","export controls",
@@ -423,12 +461,11 @@
 
     if(hasNumber || hasStrong) return true;
 
-    // Lenient mode: allow weaker topic words as catalysts
+    // Lenient mode: allow weaker topic words
     if(RUNTIME.strictness <= 0.45){
       const topicWords = ["sanction","ceasefire","tariff","cyber","earthquake","flood","wildfire","inflation","recession","opec","oil","war","strike"];
       if(topicWords.some(w => t.includes(w))) return true;
     }
-
     return false;
   }
 
@@ -490,7 +527,6 @@
   function shockScore(title, topicKey){
     const t = (title || "").toLowerCase();
     let s = 0.35;
-
     const bump = (words, inc) => { if(words.some(w => t.includes(w))) s += inc; };
 
     if(["war","geopolitics","ceasefire"].includes(topicKey)){
@@ -508,7 +544,6 @@
     } else if(["OPEC","oil"].includes(topicKey)){
       bump(["production cut","quota","output","supply shock","pipeline","brent","wti"], 0.25);
     }
-
     return clamp01(s);
   }
 
@@ -517,11 +552,9 @@
     const timing  = timingScore(seenDate, nowUtc);
 
     if(!isCatalystHeadline(title)){
-      // Strict mode: drop it
       if(RUNTIME.strictness >= 0.70){
         return { trade01: 0.0, score10: 1, clarity, timing, shock: 0, filteredOut: true, soft:false };
       }
-      // Lenient mode: keep it, but low-confidence
       const shock = shockScore(title, topicKey);
       const raw = clamp01(0.20 * clarity + 0.35 * timing + 0.45 * shock) * 0.55;
       const score10 = Math.max(1, Math.min(10, Math.round(raw * 10)));
@@ -573,7 +606,6 @@
 
           const lv = 0.65 * info.liq + 0.35 * info.vol;
           let add = base * w * lv;
-
           if(info.isEtf) add *= RUNTIME.etfBonus;
 
           info.score += add;
@@ -593,8 +625,6 @@
     }
 
     const arr = Object.values(tickerInfo);
-
-    // Normalize based on absolute value so idea mode always ranks something
     const maxAbs = Math.max(0.0001, ...arr.map(x => Math.abs(x.score)));
 
     for(const x of arr){
@@ -604,9 +634,64 @@
       x.drivers = x.drivers.slice(0,4);
     }
 
-    // Sort by absolute score (so even negative “loser” setups show in Idea Mode)
+    // Sort by absolute score
     arr.sort((a,b)=>Math.abs(b.score)-Math.abs(a.score));
     return arr;
+  }
+
+  // ---------- Trade plan math (manual price input) ----------
+  function computePlan({ ticker, isEtf, currentPrice, capital, stockTpPct }){
+    const px = Number(currentPrice);
+    const cap = Number(capital);
+
+    if(!isFinite(px) || px <= 0 || !isFinite(cap) || cap <= 0){
+      return { ok:false, reason:"Enter a valid price and capital." };
+    }
+
+    const pullback = isEtf ? ETF_PULLBACK : STOCK_PULLBACK;
+    const entry = px * (1 - pullback);
+
+    const tpPct = isEtf ? 0.15 : (Number(stockTpPct) / 100);
+    const slPct = isEtf ? -0.08 : -0.10;
+
+    const tp = entry * (1 + tpPct);
+    const sl = entry * (1 + slPct);
+
+    // Whole shares (simplest / broker-agnostic)
+    const shares = Math.floor(cap / entry);
+    const usedCapital = shares * entry;
+
+    if(shares <= 0){
+      return { ok:false, reason:`Capital is too small for 1 share at entry (~${entry.toFixed(2)}). Increase capital or choose a cheaper ticker.` };
+    }
+
+    // Fees: entry + one exit (TP/SL/time stop) = 2 executed orders
+    const fees = 2 * FEES_PER_EXECUTED_ORDER_USD;
+
+    const grossTP = (tp - entry) * shares;
+    const grossSL = (sl - entry) * shares; // negative
+
+    // Simple tax model: tax only on positive net profit after fees
+    const taxableProfit = Math.max(0, grossTP - fees);
+    const tax = taxableProfit * CAPITAL_GAINS_TAX;
+
+    const netTP = grossTP - fees - tax;
+    const netSL = grossSL - fees; // no tax applied to losses
+
+    const netTPpct = netTP / usedCapital;
+    const netSLpct = netSL / usedCapital;
+
+    // R multiple (risk/reward)
+    const riskPerShare = entry - sl;
+    const rewardPerShare = tp - entry;
+    const rr = riskPerShare > 0 ? (rewardPerShare / riskPerShare) : null;
+
+    return {
+      ok:true,
+      entry, tp, sl, shares, usedCapital, fees, tax,
+      grossTP, grossSL, netTP, netSL, netTPpct, netSLpct, rr,
+      tpPct, slPct, pullback
+    };
   }
 
   // ---------- Fetch ----------
@@ -618,9 +703,11 @@
   }
 
   async function fetchTopic(topic, opts){
-    const query = opts.customQuery?.trim()
+    const baseQuery = opts.customQuery?.trim()
       ? opts.customQuery.trim()
-      : buildQueryFromTerms(topic.terms, opts.lang, opts.country);
+      : buildQueryFromTerms(topic.terms, opts.country);
+
+    const query = forceEnglishQuery(baseQuery);
 
     const url = buildGdeltUrl({
       query,
@@ -656,13 +743,14 @@
       <div class="item">
         <div class="title">Method</div>
         <div class="smallnote">
-          Tradeability (1–10) = Clarity + Timing + Shock. Signed topic→sector weights map events into likely winners (+) and losers (-).
-          The system is long-only by default; negative scores mean “likely loser” exposure (useful as a warning, or for future short support).
+          English-only GDELT headlines → tradability score (1–10) using Clarity + Timing + Shock.
+          Then signed topic→sector weights map events into likely winners (+) and losers (-).
+          Output is long-oriented; negative “bias” is shown as a warning (and can be used later if you add short support).
         </div>
         <div class="scoreline">
           <span class="badge"><span class="dot ok"></span><b>Strictness</b> controls filter hardness + gates</span>
-          <span class="badge"><span class="dot ok"></span><b>Idea Mode</b> turns ON at ≤15% strictness to always output ideas</span>
-          <span class="badge"><span class="dot ok"></span><b>AvgTopK</b> uses top-K catalysts to avoid dilution</span>
+          <span class="badge"><span class="dot ok"></span><b>Idea Mode</b> turns ON at ≤15% strictness to force picks</span>
+          <span class="badge"><span class="dot ok"></span><b>Discipline Layer</b> prints LIMIT + OCO + time stop + fees/tax math (manual price)</span>
         </div>
       </div>
     `;
@@ -670,10 +758,9 @@
 
   function renderPicks(scan){
     if(scan.noTrade){
-      const title = "NO TRADE";
       el.viewPicks.innerHTML = `
         <div class="item">
-          <div class="title">${title}</div>
+          <div class="title">NO TRADE</div>
           <div class="sub">
             <span class="badge"><span class="dot bad"></span><b>Strong catalysts:</b> ${scan.strongCatalysts}</span>
             <span class="badge"><b>AvgTopK tradeability:</b> ${round2(scan.avgTrade01)}</span>
@@ -698,22 +785,30 @@
     const tz = scan.opts.tz;
     const head = scan.ideaMode ? "IDEA MODE (Low Conviction)" : "Top 3 Picks";
 
-    const preface = scan.ideaMode ? `
+    const preface = `
       <div class="item">
         <div class="title">${head}</div>
         <div class="smallnote">
-          Idea Mode is ON: gates are relaxed; treat these as exploratory setups, not “high-confidence” trades.
+          System discipline: choose ONE active trade at a time. Use the plans below as templates; enter a current price per ticker to compute exact orders.
         </div>
       </div>
-    ` : "";
+    `;
 
     const cards = picks.map((p, idx) => {
-      const dir = p.score >= 0 ? "winner bias" : "loser bias";
+      const bias = p.score >= 0 ? "winner bias (long candidate)" : "loser bias (avoid for long)";
       const dirDot = p.score >= 0 ? "ok" : "bad";
+
+      const isEtf = !!p.isEtf;
+      const timeboxTd = isEtf ? ETF_TIMEBOX_TD : STOCK_TIMEBOX_TD;
+      const review2Td = Math.max(1, Math.round(timeboxTd * REVIEW2_FRACTION));
+
+      const timeStop = addTradingDays(new Date(scan.createdAt), timeboxTd);
+      const review1 = addTradingDays(new Date(scan.createdAt), REVIEW1_TD);
+      const review2 = addTradingDays(new Date(scan.createdAt), review2Td);
 
       const drivers = (p.drivers || []).map(d => {
         const when = d.seenDate ? fmtDate(new Date(d.seenDate), tz) : "";
-        const soft = d.soft ? `<span class="badge"><span class="dot bad"></span>soft</span>` : "";
+        const soft = d.soft ? `<span class="badge"><span class="dot warn"></span>soft</span>` : "";
         const sign = d.add >= 0 ? "+" : "";
         return `
           <div class="sub" style="margin-top:6px;">
@@ -726,25 +821,169 @@
         `;
       }).join("");
 
+      // Trade plan UI IDs
+      const idBase = `p${idx}_${p.ticker}`;
+      const priceId = `${idBase}_price`;
+      const capId = `${idBase}_cap`;
+      const tpSelId = `${idBase}_tppct`;
+      const outId = `${idBase}_out`;
+
+      // Default capital: 1500
+      // Default stock TP: 22 (mid of 20–25). ETF TP fixed at 15%.
+      const planUI = `
+        <div class="planBox">
+          <h3>Discipline Trade Plan (manual price input)</h3>
+
+          <div class="miniGrid3">
+            <div>
+              <label>Enter current price (USD)</label>
+              <input id="${priceId}" type="number" min="0" step="0.01" placeholder="e.g. 112.35" />
+            </div>
+            <div>
+              <label>Capital per trade (USD)</label>
+              <input id="${capId}" type="number" min="1000" max="2000" step="10" value="1500" />
+            </div>
+            <div>
+              <label>Stock TP % (only stocks)</label>
+              <select id="${tpSelId}" ${isEtf ? "disabled" : ""}>
+                <option value="20">20%</option>
+                <option value="22" selected>22%</option>
+                <option value="25">25%</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="smallnote">
+            Entry is LIMIT at a small pullback (ETF −0.3%, Stock −0.7%). Exits: OCO TP/SL + time-stop.
+            Fees assumed: $${FEES_PER_EXECUTED_ORDER_USD} per executed order (entry + one exit). Tax: 25% on gains (simple model).
+          </div>
+
+          <div id="${outId}" class="smallnote"></div>
+
+          <div class="smallnote">
+            Reviews: <span class="mono">${fmtDate(review1, tz)}</span> (day 5–7),
+            <span class="mono">${fmtDate(review2, tz)}</span> (~2/3 timebox).
+            Time-stop exit: <span class="mono">${fmtDate(timeStop, tz)}</span>.
+          </div>
+        </div>
+      `;
+
       return `
         <div class="item">
           <div class="title">${idx+1}) ${escapeHtml(p.ticker)} <span class="badge">${escapeHtml(p.group)}</span></div>
           <div class="sub">
-            <span class="badge"><span class="dot ${dirDot}"></span><b>Setup score:</b> ${p.score100}/100</span>
-            <span class="badge"><b>Bias:</b> ${dir}</span>
-            <span class="badge"><b>ETF:</b> ${p.isEtf ? "yes" : "no"}</span>
-            <span class="badge"><b>Liq:</b> ${round2(p.liq)}</span>
-            <span class="badge"><b>Vol:</b> ${round2(p.vol)}</span>
+            <span class="badge"><span class="dot ${dirDot}"></span><b>Abs sensitivity:</b> ${p.score100}/100</span>
+            <span class="badge"><b>Bias:</b> ${bias}</span>
+            <span class="badge"><b>ETF:</b> ${isEtf ? "yes" : "no"}</span>
+            <span class="badge"><b>Liquidity:</b> ${round2(p.liq)}</span>
+            <span class="badge"><b>Volatility:</b> ${round2(p.vol)}</span>
+            <span class="badge"><b>Timebox:</b> ${timeboxTd} td</span>
           </div>
+
           <div class="smallnote" style="margin-top:8px;">
-            Reasoning: strongest absolute sensitivity to current catalysts (signed weights). Positive suggests “beneficiary”; negative suggests “headwind”.
+            Why this matters now: this ticker has the strongest event-sensitivity to the current headline set, within a 2–4 week reaction window.
           </div>
+
+          ${p.score < 0 ? `
+            <div class="smallnote badText" style="margin-top:8px;">
+              Note: “loser bias” suggests headwind exposure. Long trade plan is still computed as a template, but you should treat this as “avoid/hedge” unless you add short support.
+            </div>
+          ` : ""}
+
           ${drivers ? `<div style="margin-top:8px;"><div class="sub"><b>Top drivers:</b></div>${drivers}</div>` : ""}
+
+          ${planUI}
         </div>
       `;
     }).join("");
 
     el.viewPicks.innerHTML = preface + cards;
+
+    // Attach plan calculators after DOM injection
+    picks.forEach((p, idx) => {
+      const idBase = `p${idx}_${p.ticker}`;
+      const priceEl = document.getElementById(`${idBase}_price`);
+      const capEl   = document.getElementById(`${idBase}_cap`);
+      const tpEl    = document.getElementById(`${idBase}_tppct`);
+      const outEl   = document.getElementById(`${idBase}_out`);
+
+      if(!priceEl || !capEl || !tpEl || !outEl) return;
+
+      const isEtf = !!p.isEtf;
+
+      const renderOut = () => {
+        const price = Number(priceEl.value);
+        const cap = Number(capEl.value);
+        const stockTpPct = Number(tpEl.value || 22);
+
+        const plan = computePlan({
+          ticker: p.ticker,
+          isEtf,
+          currentPrice: price,
+          capital: cap,
+          stockTpPct
+        });
+
+        // Validation: discipline capital bounds
+        const capWarn =
+          (isFinite(cap) && (cap < 1000 || cap > 2000))
+            ? `<span class="badge"><span class="dot warn"></span><b>Capital out of bounds:</b> keep $1,000–$2,000</span>`
+            : "";
+
+        if(!plan.ok){
+          outEl.innerHTML = `
+            <div class="kpi">
+              ${capWarn}
+              <span class="badge"><span class="dot warn"></span>${escapeHtml(plan.reason)}</span>
+            </div>
+          `;
+          return;
+        }
+
+        const entry = plan.entry;
+        const tp = plan.tp;
+        const sl = plan.sl;
+
+        const tpPctTxt = isEtf ? "15%" : `${Math.round(plan.tpPct*100)}%`;
+        const slPctTxt = isEtf ? "-8%" : "-10%";
+
+        const rrTxt = (plan.rr == null) ? "—" : plan.rr.toFixed(2);
+
+        const netTpColor = plan.netTP >= 0 ? "ok" : "bad";
+        const netSlColor = plan.netSL >= 0 ? "ok" : "bad";
+
+        outEl.innerHTML = `
+          <div class="kpi">
+            ${capWarn}
+            <span class="badge"><span class="dot ok"></span><b>Shares:</b> ${plan.shares}</span>
+            <span class="badge"><b>Used capital:</b> $${plan.usedCapital.toFixed(2)}</span>
+            <span class="badge"><b>Fees (est.):</b> $${plan.fees.toFixed(2)}</span>
+          </div>
+
+          <div class="planLine">
+            <span class="badge"><b>LIMIT Entry:</b> $${entry.toFixed(2)} (${isEtf ? "-0.3%" : "-0.7%"})</span>
+            <span class="badge"><b>OCO TP:</b> $${tp.toFixed(2)} (${tpPctTxt})</span>
+            <span class="badge"><b>OCO SL:</b> $${sl.toFixed(2)} (${slPctTxt})</span>
+            <span class="badge"><b>R:R:</b> ${rrTxt}</span>
+          </div>
+
+          <div class="planLine">
+            <span class="badge"><span class="dot ${netTpColor}"></span><b>TP net (after fees+tax):</b> $${plan.netTP.toFixed(2)} (${(plan.netTPpct*100).toFixed(1)}%)</span>
+            <span class="badge"><span class="dot ${netSlColor}"></span><b>SL net (after fees):</b> $${plan.netSL.toFixed(2)} (${(plan.netSLpct*100).toFixed(1)}%)</span>
+            <span class="badge"><b>Tax on TP (est.):</b> $${plan.tax.toFixed(2)}</span>
+          </div>
+
+          <div class="smallnote">
+            Execution: place the LIMIT buy, then immediately place an OCO (TP/SL). If neither fills by the time-stop date, exit at market.
+          </div>
+        `;
+      };
+
+      priceEl.addEventListener("input", renderOut);
+      capEl.addEventListener("input", renderOut);
+      tpEl.addEventListener("change", renderOut);
+      renderOut();
+    });
   }
 
   function renderHeadlines(scan){
@@ -753,8 +992,8 @@
     const blocks = scan.byTopic.map(t => {
       const items = (t.items || []).map(h => {
         const when = h.seenDate ? fmtDate(new Date(h.seenDate), tz) : "";
-        const dotClass = h.score10 >= 7 ? "ok" : (h.score10 <= 3 ? "bad" : "");
-        const soft = h.soft ? `<span class="badge"><span class="dot bad"></span>soft</span>` : "";
+        const dotClass = h.score10 >= 7 ? "ok" : (h.score10 <= 3 ? "bad" : "warn");
+        const soft = h.soft ? `<span class="badge"><span class="dot warn"></span>soft</span>` : "";
         return `
           <div class="item">
             <div class="title">
@@ -783,7 +1022,7 @@
           </div>
           <div class="smallnote">Query: <span class="mono">${escapeHtml(t.query)}</span></div>
           <div class="smallnote">Source: <a href="${escapeHtml(t.url)}" target="_blank" rel="noopener noreferrer">open in GDELT</a></div>
-          ${t.error ? `<div class="smallnote" style="color:var(--bad);">Error: ${escapeHtml(t.error)}</div>` : ""}
+          ${t.error ? `<div class="smallnote badText">Error: ${escapeHtml(t.error)}</div>` : ""}
           <div style="margin-top:10px;" class="results">${items || `<div class="item">No kept catalysts for this topic.</div>`}</div>
         </div>
       `;
@@ -800,7 +1039,7 @@
         <div class="item">
           <div class="title">${escapeHtml(x.ticker)} <span class="badge">${escapeHtml(x.group)}</span></div>
           <div class="sub">
-            <span class="badge"><span class="dot ${dirDot}"></span><b>Abs score:</b> ${x.score100}/100</span>
+            <span class="badge"><span class="dot ${dirDot}"></span><b>Abs sensitivity:</b> ${x.score100}/100</span>
             <span class="badge"><b>Bias:</b> ${bias}</span>
             <span class="badge"><b>ETF:</b> ${x.isEtf ? "yes" : "no"}</span>
             <span class="badge"><b>Liq:</b> ${round2(x.liq)}</span>
@@ -827,7 +1066,7 @@
   }
 
   // ---------- History ----------
-  const STORAGE_KEY = "trade_scanner_history_v4";
+  const STORAGE_KEY = "trade_scanner_history_v5";
 
   function loadHistory(){
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -875,7 +1114,6 @@
       perTopic: Math.max(1, Math.min(25, Number(el.perTopic.value || 5))),
       concurrency: Math.max(1, Math.min(10, Number(el.concurrency.value || 4))),
       tz: el.tz.value || "Asia/Jerusalem",
-      lang: el.lang.value.trim(),
       country: el.country.value.trim(),
       customQuery: el.customQuery.value
     };
@@ -885,17 +1123,17 @@
       ["sort", opts.sort || "relevance"],
       ["perTopic", opts.perTopic],
       ["concurrency", opts.concurrency],
+      ["language", "english"],
       ["strictness", `${Math.round(RUNTIME.strictness*100)}%`],
       ["ideaMode", RUNTIME.ideaMode ? "ON" : "OFF"],
       ["minStrong", RUNTIME.minCatalysts],
       ["minAvg", RUNTIME.minAvgTrade01.toFixed(2)],
       ["liqFloor", RUNTIME.liqFloor.toFixed(2)],
       ["ETFbonus", RUNTIME.etfBonus.toFixed(2)],
-      ["sourcelang", opts.lang || "—"],
       ["sourcecountry", opts.country || "—"]
     ]);
 
-    setStatus("Fetching headlines from GDELT…");
+    setStatus("Fetching English headlines from GDELT…");
 
     let byTopicRaw;
     try{
@@ -974,7 +1212,7 @@
       (RUNTIME.strictness >= 0.45 ? !h.soft : true)
     ).length;
 
-    // Average ONLY the top-K tradeability headlines to prevent dilution
+    // Average only top-K to avoid dilution
     const K = Math.min(12, keptAll.length);
     const topK = keptAll.slice().sort((a,b)=>(b.trade01||0)-(a.trade01||0)).slice(0, K);
     const avgTrade01 = K ? (topK.reduce((s,h)=>s + (h.trade01 || 0), 0) / K) : 0;
@@ -990,10 +1228,9 @@
     } else {
       topPicks = tickerTable.slice(0,3);
 
-      // Enforce positive winner score only when not in idea mode
+      // In non-idea mode, require the top pick to be positive (beneficiary) for long setups
       if(!RUNTIME.ideaMode && topPicks.length && topPicks[0].score <= 0) noTrade = true;
 
-      // In idea mode, always show picks
       if(noTrade && RUNTIME.ideaMode) noTrade = false;
       if(noTrade) topPicks = [];
     }
