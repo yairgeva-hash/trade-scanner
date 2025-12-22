@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Event-to-Ticker Sensitivity Scanner (GDELT)</title>
+  <title>Speculative Trade Advisor (Free, GDELT)</title>
   <style>
     :root{
       --bg:#0b0f17; --panel:#0e162a; --panel2:#0b1020;
@@ -62,10 +62,10 @@
 
 <body>
 <header>
-  <h1>Event-to-Ticker Sensitivity Scanner</h1>
+  <h1>Speculative Trade Advisor (Free, GDELT)</h1>
   <p>
-    Pulls the latest headlines (GDELT DOC 2.0), scores event impact probability (1–10), and ranks the 3 most sensitive tickers for a ~15–20 day window.
-    This is a research tool, not investment advice.
+    Free-only, deterministic scanner: fetches headlines (GDELT DOC 2.0), filters for tradable catalysts, scores tradeability (1–10),
+    and ranks 3 candidates for a ~15–20 trading day event window. Research tool only.
   </p>
 </header>
 
@@ -138,15 +138,15 @@
     <div id="pills" class="pillbar"></div>
 
     <div class="smallnote">
-      Liquidity & volatility components are heuristic tables (editable in code) unless you add a market-data API.
-      GDELT queries use <span class="mono">(a OR b)</span> blocks (must be parenthesized).
+      This version tries to mimic “GPT rules” without paid APIs by using: catalyst filtering, signed winner/loser weights,
+      liquidity gating, ETF preference, and a NO TRADE decision.
     </div>
 
     <div class="hr"></div>
 
     <label>History (localStorage)</label>
     <select id="history"></select>
-    <div class="smallnote">Select a past scan to re-load its results without re-fetching news.</div>
+    <div class="smallnote">Select a past scan to re-load results without re-fetching news.</div>
   </section>
 
   <!-- RIGHT: Results -->
@@ -160,7 +160,7 @@
       <div class="tab active" data-tab="picks">Top 3 Picks</div>
       <div class="tab" data-tab="headlines">Headlines by Topic</div>
       <div class="tab" data-tab="tickers">Ticker Table</div>
-      <div class="tab" data-tab="method">Scoring Method</div>
+      <div class="tab" data-tab="method">Method</div>
     </div>
 
     <div id="viewPicks" class="results"></div>
@@ -175,7 +175,6 @@
   // ---------- Constants ----------
   const GDELT_ENDPOINT = "https://api.gdeltproject.org/api/v2/doc/doc";
 
-  // User-provided universe
   const TICKER_GROUPS = {
     defense: ["PPA","ITA","LMT","NOC","GD","RTX","BA","HII","LHX","TDG","AVAV","KTOS"],
     cyber: ["CIBR","HACK","PANW","CRWD","FTNT","ZS","OKTA","NET"],
@@ -188,7 +187,20 @@
     gold: ["GLD","IAU","GDX"]
   };
 
-  // Topics requested (plus smarter query term bundles so results exist)
+  // ETF set used for “prefer ETFs” behavior
+  const ETF_SET = new Set([
+    "PPA","ITA","CIBR","HACK","SMH","SOXX",
+    "XLE","XOP","OIH","KIE","URNM","URA",
+    "PHO","MOO","DBA","GLD","IAU","GDX"
+  ]);
+
+  // GPT-like discipline tuning (free-only)
+  const GPT_PREF_ETF_BONUS = 1.12;
+  const GPT_LIQ_FLOOR = 0.55;
+  const NO_TRADE_MIN_CATALYSTS = 2;
+  const NO_TRADE_MIN_AVG_TRADE01 = 0.58;
+
+  // Topics + query term bundles
   const TOPICS = [
     { key:"geopolitics", label:"geopolitics", terms:['geopolitics','"regional tensions"','"border clash"','"military buildup"','"diplomatic crisis"'] },
     { key:"sanctions", label:"sanctions", terms:['sanctions','"export controls"','"blacklist"','"secondary sanctions"','"asset freeze"'] },
@@ -207,43 +219,45 @@
     { key:"oil", label:"oil", terms:['"crude oil"','Brent','WTI','"oil prices"','"oil supply"'] }
   ];
 
-  // Topic -> sector weights (0..1). These are directional “beneficiary biases” for long-only.
-  // You can change them if you want “moves” (up/down) instead of “benefit”.
+  // Signed winner/loser weights (long-only output but losers are penalized in ranking)
   const TOPIC_SECTOR_WEIGHTS = {
-    geopolitics: { defense:0.8, energy:0.6, shipping:0.5, gold:0.6, insurers:0.2 },
-    sanctions:   { energy:0.5, shipping:0.5, defense:0.4, semis:0.25, gold:0.3 },
-    ceasefire:   { shipping:0.6, energy:0.25, gold:0.15, defense:0.15 },
-    war:         { defense:0.9, energy:0.6, gold:0.7, shipping:0.4 },
-    regulation:  { insurers:0.35, semis:0.25, energy:0.2 },
-    tariff:      { semis:0.45, shipping:0.35, energy:0.2 },
-    cyber:       { cyber:0.95 },
-    earthquake:  { insurers:0.25, water_agri:0.25, energy:0.15 },
-    flood:       { insurers:0.25, water_agri:0.35, energy:0.15 },
-    wildfire:    { insurers:0.25, water_agri:0.35, energy:0.15 },
-    inflation:   { gold:0.35, insurers:0.25, energy:0.2 },
-    rates:       { insurers:0.35, gold:0.25 },
-    recession:   { gold:0.45, insurers:0.25 },
-    OPEC:        { energy:0.9, shipping:0.35 },
-    oil:         { energy:0.85, shipping:0.3 }
+    geopolitics: { defense:+0.80, energy:+0.55, shipping:+0.20, gold:+0.40, insurers:-0.10, semis:-0.05, cyber:+0.10 },
+    sanctions:   { energy:+0.30, shipping:+0.20, defense:+0.20, semis:-0.25, gold:+0.25 },
+    ceasefire:   { defense:-0.45, energy:-0.20, shipping:+0.35, gold:-0.25, insurers:+0.10 },
+    war:         { defense:+0.95, energy:+0.55, gold:+0.65, shipping:+0.10, insurers:-0.20, cyber:+0.10 },
+
+    regulation:  { insurers:+0.20, semis:-0.10, energy:-0.05, cyber:+0.05 },
+    tariff:      { semis:-0.25, shipping:-0.10, energy:+0.05, gold:+0.05 },
+
+    cyber:       { cyber:+0.95, defense:+0.05 },
+
+    earthquake:  { insurers:-0.35, water_agri:+0.20, energy:-0.05 },
+    flood:       { insurers:-0.30, water_agri:+0.25, energy:-0.05 },
+    wildfire:    { insurers:-0.25, water_agri:+0.25, energy:+0.05 },
+
+    inflation:   { gold:+0.35, energy:+0.20, insurers:+0.05, semis:-0.05 },
+
+    rates_cut:   { semis:+0.20, energy:+0.05, shipping:+0.05, gold:-0.15, insurers:-0.05 },
+    rates_hike:  { insurers:+0.20, gold:-0.10, semis:-0.15, energy:-0.05 },
+
+    recession:   { gold:+0.45, insurers:-0.15, semis:-0.20, energy:-0.15 },
+
+    OPEC:        { energy:+0.85, shipping:+0.15, gold:+0.05 },
+    oil:         { energy:+0.75, shipping:+0.10, gold:+0.05 }
   };
 
   // Heuristic Liquidity scores (0..1). Edit freely.
-  // Rule of thumb: mega-caps & large ETFs high; smaller single names lower.
   const LIQ = Object.fromEntries([
-    // ETFs (generally high)
     ["PPA",0.75],["ITA",0.8],["CIBR",0.8],["HACK",0.7],["SMH",0.85],["SOXX",0.85],
     ["XLE",0.9],["XOP",0.75],["OIH",0.6],["KIE",0.65],["URNM",0.55],["URA",0.65],
     ["PHO",0.55],["MOO",0.55],["DBA",0.6],["GLD",0.95],["IAU",0.85],["GDX",0.75],
-    // Mega caps / large caps
     ["NVDA",0.95],["AVGO",0.9],["TSM",0.9],["AMD",0.9],["XOM",0.9],["CVX",0.85],
     ["BA",0.85],["RTX",0.8],["LMT",0.75],["PANW",0.8],["CRWD",0.8],["NET",0.75],
-    // Mid/smaller
     ["AVAV",0.55],["KTOS",0.5],["HII",0.45],["INSW",0.45],["STNG",0.5],["TK",0.4],
     ["ZIM",0.6],["DAC",0.45],["UEC",0.45],["LEU",0.45]
   ]);
 
   // Heuristic Volatility scores (0..1). Edit freely.
-  // Higher = more reactive; lower = more defensive/slow.
   const VOL = Object.fromEntries([
     ["NVDA",0.9],["AMD",0.85],["ARM",0.85],["MRVL",0.8],["MU",0.85],
     ["XOP",0.8],["OIH",0.85],["HAL",0.75],["SLB",0.7],
@@ -254,7 +268,6 @@
     ["KIE",0.35],["AIG",0.45],["ALL",0.35]
   ]);
 
-  // Defaults when not present in tables
   const DEFAULT_LIQ = 0.55;
   const DEFAULT_VOL = 0.55;
 
@@ -286,7 +299,6 @@
 
   // ---------- Helpers ----------
   const clamp01 = (x) => Math.max(0, Math.min(1, x));
-  const round1 = (x) => Math.round(x * 10) / 10;
   const round2 = (x) => Math.round(x * 100) / 100;
 
   function setStatus(msg, isError=false){
@@ -318,7 +330,6 @@
     }
   }
 
-  // Build GDELT query: (a OR b OR "c d") + optional sourcelang/sourcecountry
   function buildQueryFromTerms(terms, lang, country){
     const core = "(" + terms.join(" OR ") + ")";
     let q = core;
@@ -338,7 +349,6 @@
     return url.toString();
   }
 
-  // Concurrency-limited mapper
   async function mapLimit(items, limit, worker){
     const results = new Array(items.length);
     let i = 0;
@@ -352,11 +362,55 @@
     return results;
   }
 
-  // ---------- Scoring ----------
-  // Catalyst clarity: “how specific / actionable / market-relevant”
+  // ---------- GPT-like catalyst logic ----------
+  function isCatalystHeadline(title){
+    const t = (title || "").toLowerCase();
+
+    const hardReject = [
+      "what you need to know","explainer","analysis","opinion","live updates","recap",
+      "how to","watch live","timeline","faq"
+    ];
+    if(hardReject.some(w => t.includes(w))) return false;
+
+    const hasNumber = /(\d+(\.\d+)?)|(%|\$|bps|basis points|million|billion|mbpd)/i.test(title || "");
+
+    const strongTerms = [
+      "announces","imposes","approves","bans","ban","halts","suspends","launches",
+      "cuts","raises","hikes","slashes","sanctions","tariff","export controls",
+      "airstrike","missile","attack","offensive","troop","mobilization",
+      "breach","ransomware","zero-day","exploit",
+      "evacuation","earthquake","magnitude","flood","wildfire",
+      "opec","opec+","production cut","quota",
+      "cpi","pce","federal reserve","ecb","boe","rate cut","rate hike"
+    ];
+    const hasStrong = strongTerms.some(w => t.includes(w));
+
+    return hasNumber || hasStrong;
+  }
+
+  function effectiveTopicKey(topicKey, title){
+    const t = (title || "").toLowerCase();
+
+    if(topicKey === "ceasefire"){
+      const breakdown = ["violat","collapse","breaks down","ends","resumes","renewed","new attack","fails"];
+      if(breakdown.some(w => t.includes(w))) return "war";
+      return "ceasefire";
+    }
+
+    if(topicKey === "rates"){
+      if(t.includes("rate cut") || t.includes("cuts rates") || t.includes("cut interest")) return "rates_cut";
+      if(t.includes("rate hike") || t.includes("hikes rates") || t.includes("raise rates")) return "rates_hike";
+      return "rates_hike";
+    }
+
+    return topicKey;
+  }
+
+  // “Clarity”: how actionable/specific
   function catalystClarity(title){
     const t = (title || "").toLowerCase();
-    let score = 0.20; // baseline
+    let score = 0.20;
+
     const hasNumber = /(\d+(\.\d+)?)|(%|\$|bps|basis points|million|billion|mbpd)/i.test(title || "");
     if(hasNumber) score += 0.18;
 
@@ -366,71 +420,74 @@
       "breach","ransomware","hack","exploit","zero-day","evacuation","earthquake","flood","wildfire"
     ];
     for(const w of actionVerbs){
-      if(t.includes(w)) { score += 0.03; }
+      if(t.includes(w)) score += 0.03;
     }
 
     const specificityHints = ["opec","fed","ecb","boe","cpi","pce","brent","wti","pipeline","shipping lane","red sea","strait"];
     for(const w of specificityHints){
-      if(t.includes(w)) { score += 0.05; }
+      if(t.includes(w)) score += 0.05;
     }
 
-    // penalize vague listicles / opinion-y framing
     const vague = ["what you need to know","explainer","analysis","opinion","why it matters","live updates"];
     for(const w of vague){
-      if(t.includes(w)) { score -= 0.05; }
+      if(t.includes(w)) score -= 0.06;
     }
 
     return clamp01(score);
   }
 
-  // Timing: prioritize recency, but allow a 15–20 day horizon (decay slower than day-trading)
   function timingScore(seenDateUtc, nowUtc){
     if(!seenDateUtc || !(seenDateUtc instanceof Date) || isNaN(seenDateUtc)) return 0.55;
     const hours = Math.max(0, (nowUtc - seenDateUtc) / 36e5);
-    const halfLifeHrs = 42; // adjust as you like
+    const halfLifeHrs = 42;
     const score = Math.pow(0.5, hours / halfLifeHrs);
     return clamp01(0.15 + 0.85 * score);
+  }
+
+  function shockScore(title, topicKey){
+    const t = (title || "").toLowerCase();
+    let s = 0.35;
+
+    const bump = (words, inc) => { if(words.some(w => t.includes(w))) s += inc; };
+
+    if(["war","geopolitics","ceasefire"].includes(topicKey)){
+      bump(["missile","airstrike","drone","ballistic","offensive","troops","mobilization"], 0.25);
+      bump(["red sea","strait","shipping lane"], 0.10);
+    } else if(["sanctions","tariff"].includes(topicKey)){
+      bump(["export controls","blacklist","secondary sanctions","asset freeze","import duty","export ban"], 0.25);
+    } else if(topicKey === "cyber"){
+      bump(["ransomware","data breach","zero-day","critical vulnerability","exploit"], 0.30);
+    } else if(["earthquake","flood","wildfire"].includes(topicKey)){
+      bump(["magnitude","deadly","evacuat","infrastructure","power outage","refinery"], 0.25);
+    } else if(["inflation","recession","rates_cut","rates_hike","rates"].includes(topicKey)){
+      bump(["surprise","unexpected","beats","misses","guidance","bps","basis points"], 0.20);
+      bump(["cpi","pce","fed","ecb","boe"], 0.15);
+    } else if(["OPEC","oil"].includes(topicKey)){
+      bump(["production cut","quota","output","supply shock","pipeline","brent","wti"], 0.25);
+    }
+
+    return clamp01(s);
+  }
+
+  function headlineTradeability({ topicKey, title, seenDate }, nowUtc){
+    const clarity = catalystClarity(title);
+    const timing  = timingScore(seenDate, nowUtc);
+
+    if(!isCatalystHeadline(title)){
+      return { trade01: 0.0, score10: 1, clarity, timing, shock: 0, filteredOut: true };
+    }
+
+    const shock = shockScore(title, topicKey);
+    const raw = clamp01(0.45 * clarity + 0.25 * timing + 0.30 * shock);
+    const score10 = Math.max(1, Math.min(10, Math.round(raw * 10)));
+    return { trade01: raw, score10, clarity, timing, shock, filteredOut: false };
   }
 
   function tickerLiquidity(t){ return LIQ[t] ?? DEFAULT_LIQ; }
   function tickerVol(t){ return VOL[t] ?? DEFAULT_VOL; }
 
-  // Headline -> per-sector impact (0..1), then to 1..10 score
-  function headlineImpactScore({ topicKey, title, seenDate }, nowUtc){
-    const clarity = catalystClarity(title);
-    const timing = timingScore(seenDate, nowUtc);
-
-    const sectorWeights = TOPIC_SECTOR_WEIGHTS[topicKey] || {};
-    const sectors = Object.keys(sectorWeights);
-
-    // Compute average liquidity/vol across impacted sectors’ tickers
-    let liqAvg = 0, volAvg = 0, n = 0;
-    for(const s of sectors){
-      const tickers = TICKER_GROUPS[s] || [];
-      for(const t of tickers){
-        liqAvg += tickerLiquidity(t);
-        volAvg += tickerVol(t);
-        n++;
-      }
-    }
-    liqAvg = n ? (liqAvg / n) : 0.55;
-    volAvg = n ? (volAvg / n) : 0.55;
-
-    // Weighted “probability of impact” proxy (0..1)
-    const raw = clamp01(
-      0.45 * clarity +
-      0.25 * timing +
-      0.15 * liqAvg +
-      0.15 * volAvg
-    );
-
-    // Convert to 1..10 (keep non-zero floor)
-    const score10 = Math.max(1, Math.min(10, Math.round(raw * 10)));
-    return { score10, clarity, timing, liqAvg, volAvg };
-  }
-
-  // Aggregate to tickers: sum of (headline strength * sector weight * ticker liquidity/vol mix)
-  function aggregateTickerScores(allHeadlines, nowUtc){
+  // Aggregate tickers using signed weights, liquidity gating, ETF preference
+  function aggregateTickerScores(allHeadlines){
     const tickerInfo = {};
     const tickerToGroup = {};
     for(const [g, arr] of Object.entries(TICKER_GROUPS)){
@@ -444,6 +501,7 @@
           group:tickerToGroup[t] || "unknown",
           liq:tickerLiquidity(t),
           vol:tickerVol(t),
+          isEtf: ETF_SET.has(t),
           score:0,
           drivers:[]
         };
@@ -453,17 +511,25 @@
 
     for(const h of allHeadlines){
       const sectorWeights = TOPIC_SECTOR_WEIGHTS[h.topicKey] || {};
-      const base = h.impact01; // 0..1
+      const base = h.trade01 || 0;
+
       for(const [sector, w] of Object.entries(sectorWeights)){
         const tickers = TICKER_GROUPS[sector] || [];
         for(const t of tickers){
           const info = ensure(t);
-          const lv = 0.55 * info.liq + 0.45 * info.vol; // liquidity+volatility blend
-          const add = base * w * lv;
+
+          // Eligibility: keep ETFs; for stocks enforce liquidity floor
+          if(!info.isEtf && info.liq < GPT_LIQ_FLOOR) continue;
+
+          const lv = 0.65 * info.liq + 0.35 * info.vol;
+          let add = base * w * lv;
+
+          if(info.isEtf) add *= GPT_PREF_ETF_BONUS;
+
           info.score += add;
 
-          // store headline as driver if meaningful
-          if(add > 0.035){
+          // Only store positive drivers (what a long trade benefits from)
+          if(add > 0.030){
             info.drivers.push({
               add,
               topicKey: h.topicKey,
@@ -476,23 +542,23 @@
       }
     }
 
-    // normalize for presentation
     const arr = Object.values(tickerInfo);
-    const max = Math.max(0.0001, ...arr.map(x => x.score));
+
+    // If negatives exist, normalize against max positive so UI is stable
+    const maxPos = Math.max(0.0001, ...arr.map(x => x.score));
     for(const x of arr){
-      x.scoreN = x.score / max;         // 0..1
+      x.scoreN = x.score / maxPos;
       x.score100 = Math.round(x.scoreN * 100);
       x.drivers.sort((a,b)=>b.add-a.add);
       x.drivers = x.drivers.slice(0,4);
     }
+
     arr.sort((a,b)=>b.score-a.score);
     return arr;
   }
 
   // ---------- Fetch ----------
   function parseGdeltSeenDate(s){
-    // GDELT typically returns "YYYY-MM-DD HH:MM:SS"
-    // Treat as UTC for scoring (good enough for relative timing).
     if(!s) return null;
     const iso = String(s).replace(" ", "T") + "Z";
     const d = new Date(iso);
@@ -500,19 +566,15 @@
   }
 
   async function fetchTopic(topic, opts){
-    const perTopic = opts.perTopic;
-    const lang = opts.lang;
-    const country = opts.country;
-
     const query = opts.customQuery?.trim()
       ? opts.customQuery.trim()
-      : buildQueryFromTerms(topic.terms, lang, country);
+      : buildQueryFromTerms(topic.terms, opts.lang, opts.country);
 
     const url = buildGdeltUrl({
       query,
       timespan: opts.timespan,
       sort: opts.sort,
-      maxrecords: perTopic
+      maxrecords: opts.perTopic
     });
 
     const resp = await fetch(url);
@@ -520,10 +582,7 @@
 
     let data;
     try { data = JSON.parse(text); }
-    catch {
-      // GDELT sometimes returns plain text errors; surface them
-      throw new Error(`Non-JSON from GDELT (HTTP ${resp.status}): ${text.slice(0,160)}`);
-    }
+    catch { throw new Error(`Non-JSON from GDELT (HTTP ${resp.status}): ${text.slice(0,160)}`); }
 
     const articles = Array.isArray(data) ? data : (data.articles || data.data || []);
     return { topicKey: topic.key, topicLabel: topic.label, query, url, articles };
@@ -543,28 +602,47 @@
   function renderMethod(){
     el.viewMethod.innerHTML = `
       <div class="item">
-        <div class="title">Headline score (1–10): “Probability of impact” proxy</div>
-        <div class="sub">
-          Computed from four components (all 0..1): Catalyst Clarity + Timing + Liquidity + Volatility.
+        <div class="title">Method (Free-only GPT-like rules)</div>
+        <div class="smallnote">
+          Headlines are filtered to keep only likely price-moving catalysts (actionable, specific, time-relevant).
+          Each kept headline gets a <b>Tradeability</b> score (1–10) derived from:
         </div>
         <div class="scoreline">
-          <span class="badge"><span class="dot ok"></span><b>Clarity</b> derived from title specificity (numbers, actions, known macro/geopolitical triggers)</span>
-          <span class="badge"><span class="dot ok"></span><b>Timing</b> decays with age (half-life ~42 hours, tuned for 15–20 day swing sensitivity)</span>
-          <span class="badge"><span class="dot ok"></span><b>Liquidity</b> heuristic per ticker (editable table)</span>
-          <span class="badge"><span class="dot ok"></span><b>Volatility</b> heuristic per ticker (editable table)</span>
+          <span class="badge"><span class="dot ok"></span><b>Clarity</b> (numbers, actions, institutions)</span>
+          <span class="badge"><span class="dot ok"></span><b>Timing</b> (recency decay; tuned for ~15–20 trading days)</span>
+          <span class="badge"><span class="dot ok"></span><b>Shock</b> (keyword intensity per topic)</span>
         </div>
         <div class="smallnote">
-          Ticker ranking aggregates all headlines using topic→sector weights and ticker (liq/vol) blend.
-          If you want “direction” (bullish/bearish) or to support shorts/options explicitly, that is an additional layer.
+          Ticker ranking uses <b>signed winner/loser sector weights</b>, applies a <b>liquidity floor</b> (drop illiquid stocks),
+          and adds a small <b>ETF preference bonus</b> to mimic “prefer event-driven ETFs”.
+          The scanner can output <b>NO TRADE</b> if catalysts are not clean enough.
         </div>
       </div>
     `;
   }
 
   function renderPicks(scan){
-    const picks = scan.topPicks;
-    if(!picks?.length){
-      el.viewPicks.innerHTML = `<div class="item">No picks (no headlines returned).</div>`;
+    if(scan.noTrade){
+      el.viewPicks.innerHTML = `
+        <div class="item">
+          <div class="title">NO TRADE</div>
+          <div class="sub">
+            <span class="badge"><span class="dot bad"></span><b>Strong catalysts:</b> ${scan.strongCatalysts}</span>
+            <span class="badge"><b>Avg tradeability:</b> ${round2(scan.avgTrade01)}</span>
+            <span class="badge"><b>Filtered headlines kept:</b> ${scan.countKept}</span>
+          </div>
+          <div class="smallnote" style="margin-top:8px;">
+            Not enough clean, time-bounded shocks to justify a short-term event-driven trade under disciplined rules.
+            Try a longer lookback, remove filters, or rerun later.
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    const picks = scan.topPicks || [];
+    if(!picks.length){
+      el.viewPicks.innerHTML = `<div class="item">No picks.</div>`;
       return;
     }
 
@@ -588,11 +666,12 @@
           <div class="title">${idx+1}) ${escapeHtml(p.ticker)} <span class="badge">${escapeHtml(p.group)}</span></div>
           <div class="sub">
             <span class="badge"><span class="dot ok"></span><b>Setup score:</b> ${p.score100}/100</span>
-            <span class="badge"><span class="dot"></span><b>Liq:</b> ${round2(p.liq)}</span>
-            <span class="badge"><span class="dot"></span><b>Vol:</b> ${round2(p.vol)}</span>
+            <span class="badge"><b>ETF:</b> ${p.isEtf ? "yes" : "no"}</span>
+            <span class="badge"><b>Liq:</b> ${round2(p.liq)}</span>
+            <span class="badge"><b>Vol:</b> ${round2(p.vol)}</span>
           </div>
           <div class="smallnote" style="margin-top:8px;">
-            Reasoning: high cumulative sensitivity to today’s top catalysts in its sector group, plus liq/vol profile suited for a 15–20 day reaction window.
+            Reasoning: strongest net “winner” exposure to filtered tradable catalysts, with liquidity/vol profile suitable for a 15–20 day reaction window.
           </div>
           ${drivers ? `<div style="margin-top:8px;"><div class="sub"><b>Top drivers:</b></div>${drivers}</div>` : ""}
         </div>
@@ -602,6 +681,7 @@
 
   function renderHeadlines(scan){
     const tz = scan.opts.tz;
+
     const blocks = scan.byTopic.map(t => {
       const items = (t.items || []).map(h => {
         const when = h.seenDate ? fmtDate(new Date(h.seenDate), tz) : "";
@@ -614,9 +694,10 @@
             <div class="sub">
               <span>${escapeHtml(h.domain || "")}</span>
               <span>${escapeHtml(when)}</span>
-              <span class="badge"><span class="dot ${dotClass}"></span><b>Impact:</b> ${h.score10}/10</span>
+              <span class="badge"><span class="dot ${dotClass}"></span><b>Tradeability:</b> ${h.score10}/10</span>
               <span class="badge"><b>Clarity:</b> ${round2(h.clarity)}</span>
               <span class="badge"><b>Timing:</b> ${round2(h.timing)}</span>
+              <span class="badge"><b>Shock:</b> ${round2(h.shock)}</span>
             </div>
             <div class="smallnote mono" style="margin-top:8px; word-break:break-word;">${escapeHtml(h.url)}</div>
           </div>
@@ -625,10 +706,14 @@
 
       return `
         <div class="item">
-          <div class="title">${escapeHtml(t.topicLabel)} <span class="badge">top ${t.items.length}</span></div>
+          <div class="title">${escapeHtml(t.topicLabel)}
+            <span class="badge">raw ${t.rawCount}</span>
+            <span class="badge">kept ${t.items.length}</span>
+          </div>
           <div class="smallnote">Query: <span class="mono">${escapeHtml(t.query)}</span></div>
           <div class="smallnote">Source: <a href="${escapeHtml(t.url)}" target="_blank" rel="noopener noreferrer">open in GDELT</a></div>
-          <div style="margin-top:10px;" class="results">${items || `<div class="item">No results.</div>`}</div>
+          ${t.error ? `<div class="smallnote" style="color:var(--bad);">Error: ${escapeHtml(t.error)}</div>` : ""}
+          <div style="margin-top:10px;" class="results">${items || `<div class="item">No kept catalysts for this topic.</div>`}</div>
         </div>
       `;
     }).join("");
@@ -643,6 +728,7 @@
           <div class="title">${escapeHtml(x.ticker)} <span class="badge">${escapeHtml(x.group)}</span></div>
           <div class="sub">
             <span class="badge"><b>Score:</b> ${x.score100}/100</span>
+            <span class="badge"><b>ETF:</b> ${x.isEtf ? "yes" : "no"}</span>
             <span class="badge"><b>Liq:</b> ${round2(x.liq)}</span>
             <span class="badge"><b>Vol:</b> ${round2(x.vol)}</span>
           </div>
@@ -650,7 +736,7 @@
             <div class="smallnote" style="margin-top:8px;">
               Drivers: ${x.drivers.map(d => `${escapeHtml(d.topicKey)} (+${round2(d.add)})`).join(", ")}
             </div>
-          ` : `<div class="smallnote" style="margin-top:8px;">No strong drivers detected.</div>`}
+          ` : `<div class="smallnote" style="margin-top:8px;">No strong positive drivers detected.</div>`}
         </div>
       `;
     }).join("");
@@ -658,7 +744,8 @@
   }
 
   function renderAll(scan){
-    el.meta.textContent = `Scan @ ${fmtDate(new Date(scan.createdAt), scan.opts.tz)} | ${scan.countHeadlines} headlines`;
+    el.meta.textContent =
+      `Scan @ ${fmtDate(new Date(scan.createdAt), scan.opts.tz)} | raw: ${scan.countRaw} | kept: ${scan.countKept} | strong: ${scan.strongCatalysts} | avg: ${round2(scan.avgTrade01)}`;
     renderPicks(scan);
     renderHeadlines(scan);
     renderTickers(scan);
@@ -666,7 +753,7 @@
   }
 
   // ---------- History ----------
-  const STORAGE_KEY = "trade_scanner_history_v1";
+  const STORAGE_KEY = "trade_scanner_history_v2";
 
   function loadHistory(){
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -693,7 +780,7 @@
       o.value = String(i);
       const dt = new Date(s.createdAt);
       const top = (s.topPicks || []).map(x=>x.ticker).join(", ");
-      o.textContent = `${i+1}) ${dt.toLocaleString()} | Top: ${top || "—"}`;
+      o.textContent = `${i+1}) ${dt.toLocaleString()} | Top: ${top || (s.noTrade ? "NO TRADE" : "—")}`;
       el.history.appendChild(o);
     }
   }
@@ -723,19 +810,21 @@
       ["perTopic", opts.perTopic],
       ["concurrency", opts.concurrency],
       ["sourcelang", opts.lang || "—"],
-      ["sourcecountry", opts.country || "—"]
+      ["sourcecountry", opts.country || "—"],
+      ["liqFloor", GPT_LIQ_FLOOR],
+      ["ETF bonus", GPT_PREF_ETF_BONUS]
     ]);
 
     setStatus("Fetching headlines from GDELT…");
 
-    let byTopic;
+    let byTopicRaw;
     try{
-      byTopic = await mapLimit(TOPICS, opts.concurrency, async (topic) => {
+      byTopicRaw = await mapLimit(TOPICS, opts.concurrency, async (topic) => {
         try{
           const r = await fetchTopic(topic, opts);
           return { ...r, error: null };
         }catch(e){
-          return { topicKey: topic.key, topicLabel: topic.label, query: "", url: "", items: [], error: String(e.message || e) };
+          return { topicKey: topic.key, topicLabel: topic.label, query: "", url: "", articles: [], error: String(e.message || e) };
         }
       });
     }catch(e){
@@ -744,32 +833,36 @@
       return;
     }
 
-    // Normalize & score headlines
-    const all = [];
-    const scoredByTopic = byTopic.map(t => {
-      const items = (t.articles || []).map(a => {
+    // Normalize & filter headlines
+    const keptAll = [];
+    let countRaw = 0;
+
+    const scoredByTopic = byTopicRaw.map(t => {
+      const rawArticles = (t.articles || []);
+      countRaw += rawArticles.length;
+
+      const items = rawArticles.map(a => {
         const title = a.title || "(no title)";
         const url = a.url || a.url_mobile || "#";
         const domain = a.domain || "";
         const seenDate = parseGdeltSeenDate(a.seendate || a.seenDate || "");
-        const { score10, clarity, timing, liqAvg, volAvg } = headlineImpactScore({
-          topicKey: t.topicKey, title, seenDate
-        }, nowUtc);
 
-        const impact01 = clamp01(score10 / 10);
+        const effKey = effectiveTopicKey(t.topicKey, title);
+        const { trade01, score10, clarity, timing, shock, filteredOut } =
+          headlineTradeability({ topicKey: effKey, title, seenDate }, nowUtc);
+
+        if(filteredOut) return null;
 
         const h = {
-          topicKey: t.topicKey,
+          topicKey: effKey,
           topicLabel: t.topicLabel,
           title, url, domain,
           seenDate: seenDate ? seenDate.toISOString() : null,
-          score10, impact01,
-          clarity, timing,
-          liqAvg, volAvg
+          trade01, score10, clarity, timing, shock
         };
-        all.push(h);
+        keptAll.push(h);
         return h;
-      });
+      }).filter(Boolean);
 
       return {
         topicKey: t.topicKey,
@@ -777,28 +870,50 @@
         query: t.query,
         url: t.url,
         error: t.error,
+        rawCount: rawArticles.length,
         items
       };
     });
 
-    // Aggregate to tickers
-    const tickerTable = aggregateTickerScores(all, nowUtc);
-    const topPicks = tickerTable.slice(0,3);
+    // Ticker aggregation
+    const tickerTable = aggregateTickerScores(keptAll);
+    const strongCatalysts = keptAll.filter(h => h.score10 >= 7 && h.clarity >= 0.55).length;
+    const avgTrade01 = keptAll.length ? (keptAll.reduce((s,h)=>s + (h.trade01 || 0), 0) / keptAll.length) : 0;
+
+    let noTrade = false;
+    let topPicks = [];
+
+    if(keptAll.length === 0){
+      noTrade = true;
+    } else if(strongCatalysts < NO_TRADE_MIN_CATALYSTS || avgTrade01 < NO_TRADE_MIN_AVG_TRADE01){
+      noTrade = true;
+    } else {
+      topPicks = tickerTable.slice(0,3);
+      // If top scores are non-positive, avoid forced picks
+      if(topPicks.length && topPicks[0].score <= 0) noTrade = true;
+      if(noTrade) topPicks = [];
+    }
 
     const scan = {
       createdAt: nowUtc.toISOString(),
       opts,
       byTopic: scoredByTopic,
-      countHeadlines: all.length,
+      countRaw,
+      countKept: keptAll.length,
+      strongCatalysts,
+      avgTrade01,
+      noTrade,
       tickerTable,
       topPicks
     };
 
     lastScan = scan;
 
-    // Render
-    if(all.length === 0){
-      setStatus("No headlines returned. Try a longer timespan or remove filters.", true);
+    // Status
+    if(countRaw === 0){
+      setStatus("No headlines returned. Try a longer lookback or remove filters.", true);
+    } else if(scan.noTrade){
+      setStatus(`NO TRADE: catalysts not clean enough (strong=${scan.strongCatalysts}, avg=${round2(scan.avgTrade01)}, kept=${scan.countKept}).`, true);
     } else {
       const errCount = scoredByTopic.filter(x=>x.error).length;
       setStatus(errCount ? `Completed with ${errCount} topic errors (see Headlines tab).` : "Completed.");
@@ -854,12 +969,10 @@
   document.querySelectorAll(".tab").forEach(t=>{
     t.addEventListener("click", () => setActiveTab(t.dataset.tab));
   });
-
   el.runBtn.addEventListener("click", runScan);
   el.saveBtn.addEventListener("click", saveCurrent);
   el.exportBtn.addEventListener("click", exportJson);
   el.clearHistoryBtn.addEventListener("click", clearHistory);
-
   el.history.addEventListener("change", () => {
     const v = el.history.value;
     if(!v) return;
