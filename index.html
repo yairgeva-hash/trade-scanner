@@ -1,0 +1,876 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Event-to-Ticker Sensitivity Scanner (GDELT)</title>
+  <style>
+    :root{
+      --bg:#0b0f17; --panel:#0e162a; --panel2:#0b1020;
+      --border:#1d2a44; --border2:#233357;
+      --text:#e8eefc; --muted:rgba(232,238,252,.72);
+      --accent:#2a5cff; --bad:#ff8080; --ok:#93ffb4;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    }
+    body{margin:0;background:var(--bg);color:var(--text);}
+    header{padding:18px 18px;border-bottom:1px solid var(--border);background:#0b1020;}
+    header h1{margin:0 0 6px;font-size:18px;}
+    header p{margin:0;color:var(--muted);font-size:13px;line-height:1.35;}
+    main{padding:16px 18px;max-width:1200px;margin:0 auto;}
+    .grid{display:grid;grid-template-columns:1fr;gap:12px;}
+    @media(min-width:980px){.grid{grid-template-columns:420px 1fr;}}
+    .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px;}
+    label{display:block;font-size:12px;color:var(--muted);margin:10px 0 6px;}
+    input,select,textarea,button{
+      width:100%;box-sizing:border-box;border-radius:12px;border:1px solid var(--border2);
+      background:var(--panel2);color:var(--text);padding:10px 11px;font-size:14px;
+    }
+    textarea{min-height:66px;resize:vertical;}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+    .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+    .actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;}
+    button{cursor:pointer;font-weight:700;}
+    button.primary{background:var(--accent);border-color:var(--accent);}
+    button.ghost{background:transparent;}
+    button:disabled{opacity:.65;cursor:not-allowed;}
+    .status{margin-top:10px;font-size:13px;color:var(--muted);}
+    .status.error{color:var(--bad);}
+    .pillbar{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
+    .pill{border:1px solid var(--border2);background:var(--panel2);padding:5px 9px;border-radius:999px;font-size:12px;color:var(--muted);}
+    .rightHead{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:10px;}
+    .rightHead h2{margin:0;font-size:16px;}
+    .rightHead .small{font-size:12px;color:var(--muted);}
+    .tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px;}
+    .tab{padding:8px 10px;border-radius:999px;border:1px solid var(--border2);background:var(--panel2);font-size:12px;color:var(--muted);cursor:pointer;user-select:none;}
+    .tab.active{border-color:var(--accent);color:var(--text);}
+    .results{display:grid;gap:10px;}
+    .item{border-radius:14px;border:1px solid var(--border);background:var(--panel2);padding:12px;}
+    .item .title{margin:0 0 6px;font-weight:800;line-height:1.25;}
+    .item a{color:#9dc0ff;text-decoration:none;}
+    .item a:hover{text-decoration:underline;}
+    .sub{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted);}
+    .scoreline{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--muted);}
+    .badge{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border2);background:#0b1020;padding:4px 8px;border-radius:999px;}
+    .dot{width:8px;height:8px;border-radius:999px;background:var(--muted);display:inline-block;}
+    .dot.ok{background:var(--ok);}
+    .dot.bad{background:var(--bad);}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;}
+    .smallnote{font-size:12px;color:var(--muted);line-height:1.35;margin-top:10px;}
+    .hr{height:1px;background:var(--border);margin:10px 0;}
+  </style>
+</head>
+
+<body>
+<header>
+  <h1>Event-to-Ticker Sensitivity Scanner</h1>
+  <p>
+    Pulls the latest headlines (GDELT DOC 2.0), scores event impact probability (1–10), and ranks the 3 most sensitive tickers for a ~15–20 day window.
+    This is a research tool, not investment advice.
+  </p>
+</header>
+
+<main class="grid">
+  <!-- LEFT: Controls -->
+  <section class="card">
+    <div class="row">
+      <div>
+        <label>Lookback (TIMESPAN)</label>
+        <select id="timespan">
+          <option value="1h">Last 1 hour</option>
+          <option value="6h">Last 6 hours</option>
+          <option value="12h" selected>Last 12 hours</option>
+          <option value="1day">Last 1 day</option>
+          <option value="3day">Last 3 days</option>
+          <option value="1week">Last 1 week</option>
+        </select>
+      </div>
+      <div>
+        <label>Sort</label>
+        <select id="sort">
+          <option value="datedesc" selected>Date (newest first)</option>
+          <option value="">Relevance</option>
+          <option value="toneasc">Tone (most negative)</option>
+          <option value="tonedesc">Tone (most positive)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row3">
+      <div>
+        <label>Headlines / topic</label>
+        <input id="perTopic" type="number" min="1" max="25" value="5" />
+      </div>
+      <div>
+        <label>Concurrency</label>
+        <input id="concurrency" type="number" min="1" max="10" value="4" />
+      </div>
+      <div>
+        <label>Time zone display</label>
+        <select id="tz">
+          <option value="Asia/Jerusalem" selected>Asia/Jerusalem</option>
+          <option value="UTC">UTC</option>
+          <option value="America/New_York">America/New_York</option>
+          <option value="Europe/London">Europe/London</option>
+        </select>
+      </div>
+    </div>
+
+    <label>Optional filters (applied to all topics)</label>
+    <div class="row">
+      <input id="lang" placeholder="sourcelang (e.g. english)" />
+      <input id="country" placeholder="sourcecountry (e.g. unitedstates)" />
+    </div>
+
+    <label>Optional: custom topic query override (advanced)</label>
+    <textarea id="customQuery" placeholder='Leave blank. Example: ("sanctions" OR "export controls") sourcelang:english'></textarea>
+
+    <div class="actions">
+      <button id="runBtn" class="primary">Run Scan</button>
+      <button id="saveBtn" class="ghost" disabled>Save to History</button>
+    </div>
+
+    <div class="actions" style="grid-template-columns:1fr 1fr;">
+      <button id="exportBtn" class="ghost" disabled>Export JSON</button>
+      <button id="clearHistoryBtn" class="ghost">Clear History</button>
+    </div>
+
+    <div id="status" class="status"></div>
+    <div id="pills" class="pillbar"></div>
+
+    <div class="smallnote">
+      Liquidity & volatility components are heuristic tables (editable in code) unless you add a market-data API.
+      GDELT queries use <span class="mono">(a OR b)</span> blocks (must be parenthesized).
+    </div>
+
+    <div class="hr"></div>
+
+    <label>History (localStorage)</label>
+    <select id="history"></select>
+    <div class="smallnote">Select a past scan to re-load its results without re-fetching news.</div>
+  </section>
+
+  <!-- RIGHT: Results -->
+  <section class="card">
+    <div class="rightHead">
+      <h2>Results</h2>
+      <div id="meta" class="small"></div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" data-tab="picks">Top 3 Picks</div>
+      <div class="tab" data-tab="headlines">Headlines by Topic</div>
+      <div class="tab" data-tab="tickers">Ticker Table</div>
+      <div class="tab" data-tab="method">Scoring Method</div>
+    </div>
+
+    <div id="viewPicks" class="results"></div>
+    <div id="viewHeadlines" class="results" style="display:none;"></div>
+    <div id="viewTickers" class="results" style="display:none;"></div>
+    <div id="viewMethod" class="results" style="display:none;"></div>
+  </section>
+</main>
+
+<script>
+(() => {
+  // ---------- Constants ----------
+  const GDELT_ENDPOINT = "https://api.gdeltproject.org/api/v2/doc/doc";
+
+  // User-provided universe
+  const TICKER_GROUPS = {
+    defense: ["PPA","ITA","LMT","NOC","GD","RTX","BA","HII","LHX","TDG","AVAV","KTOS"],
+    cyber: ["CIBR","HACK","PANW","CRWD","FTNT","ZS","OKTA","NET"],
+    semis: ["SMH","SOXX","NVDA","AVGO","TSM","MU","ASML","AMAT","LRCX","KLAC","AMD","ARM","MRVL"],
+    energy: ["XLE","XOP","LNG","VLO","CVX","XOM","SLB","HAL","OIH"],
+    shipping: ["INSW","STNG","TK","ZIM","DAC"],
+    uranium: ["URNM","URA","CCJ","UEC","LEU"],
+    water_agri: ["PHO","MOO","DBA","NTR","MOS","CF","DE"],
+    insurers: ["KIE","CB","TRV","ALL","AIG"],
+    gold: ["GLD","IAU","GDX"]
+  };
+
+  // Topics requested (plus smarter query term bundles so results exist)
+  const TOPICS = [
+    { key:"geopolitics", label:"geopolitics", terms:['geopolitics','"regional tensions"','"border clash"','"military buildup"','"diplomatic crisis"'] },
+    { key:"sanctions", label:"sanctions", terms:['sanctions','"export controls"','"blacklist"','"secondary sanctions"','"asset freeze"'] },
+    { key:"ceasefire", label:"ceasefire", terms:['ceasefire','"truce"','"peace talks"','"temporary halt"'] },
+    { key:"war", label:"war", terms:['war','"airstrike"','"missile attack"','"ground offensive"','"troop deployment"'] },
+    { key:"regulation", label:"regulation", terms:['regulation','"regulatory crackdown"','"antitrust"','"compliance rule"','"SEC"','"FTC"'] },
+    { key:"tariff", label:"tariff", terms:['tariff','"trade war"','"import duty"','"export ban"'] },
+    { key:"cyber", label:"cyber", terms:['cyber','"ransomware"','"data breach"','"DDoS"','"zero-day"','"hackers"'] },
+    { key:"earthquake", label:"earthquake", terms:['earthquake','"seismic"','"aftershock"','"magnitude"'] },
+    { key:"flood", label:"flood", terms:['flood','"flash flood"','"storm surge"','"river overflow"'] },
+    { key:"wildfire", label:"wildfire", terms:['wildfire','"forest fire"','"evacuation order"','"burning"'] },
+    { key:"inflation", label:"inflation", terms:['inflation','"CPI"','"PCE"','"price pressures"','"core inflation"'] },
+    { key:"rates", label:"rates", terms:['"interest rate"','"rate hike"','"rate cut"','"policy rate"','"Federal Reserve"','ECB','BoE'] },
+    { key:"recession", label:"recession", terms:['recession','"GDP contraction"','"yield curve"','"job losses"','"hard landing"'] },
+    { key:"OPEC", label:"OPEC", terms:['OPEC','"OPEC+"','"oil output"','"production cut"','"quota"'] },
+    { key:"oil", label:"oil", terms:['"crude oil"','Brent','WTI','"oil prices"','"oil supply"'] }
+  ];
+
+  // Topic -> sector weights (0..1). These are directional “beneficiary biases” for long-only.
+  // You can change them if you want “moves” (up/down) instead of “benefit”.
+  const TOPIC_SECTOR_WEIGHTS = {
+    geopolitics: { defense:0.8, energy:0.6, shipping:0.5, gold:0.6, insurers:0.2 },
+    sanctions:   { energy:0.5, shipping:0.5, defense:0.4, semis:0.25, gold:0.3 },
+    ceasefire:   { shipping:0.6, energy:0.25, gold:0.15, defense:0.15 },
+    war:         { defense:0.9, energy:0.6, gold:0.7, shipping:0.4 },
+    regulation:  { insurers:0.35, semis:0.25, energy:0.2 },
+    tariff:      { semis:0.45, shipping:0.35, energy:0.2 },
+    cyber:       { cyber:0.95 },
+    earthquake:  { insurers:0.25, water_agri:0.25, energy:0.15 },
+    flood:       { insurers:0.25, water_agri:0.35, energy:0.15 },
+    wildfire:    { insurers:0.25, water_agri:0.35, energy:0.15 },
+    inflation:   { gold:0.35, insurers:0.25, energy:0.2 },
+    rates:       { insurers:0.35, gold:0.25 },
+    recession:   { gold:0.45, insurers:0.25 },
+    OPEC:        { energy:0.9, shipping:0.35 },
+    oil:         { energy:0.85, shipping:0.3 }
+  };
+
+  // Heuristic Liquidity scores (0..1). Edit freely.
+  // Rule of thumb: mega-caps & large ETFs high; smaller single names lower.
+  const LIQ = Object.fromEntries([
+    // ETFs (generally high)
+    ["PPA",0.75],["ITA",0.8],["CIBR",0.8],["HACK",0.7],["SMH",0.85],["SOXX",0.85],
+    ["XLE",0.9],["XOP",0.75],["OIH",0.6],["KIE",0.65],["URNM",0.55],["URA",0.65],
+    ["PHO",0.55],["MOO",0.55],["DBA",0.6],["GLD",0.95],["IAU",0.85],["GDX",0.75],
+    // Mega caps / large caps
+    ["NVDA",0.95],["AVGO",0.9],["TSM",0.9],["AMD",0.9],["XOM",0.9],["CVX",0.85],
+    ["BA",0.85],["RTX",0.8],["LMT",0.75],["PANW",0.8],["CRWD",0.8],["NET",0.75],
+    // Mid/smaller
+    ["AVAV",0.55],["KTOS",0.5],["HII",0.45],["INSW",0.45],["STNG",0.5],["TK",0.4],
+    ["ZIM",0.6],["DAC",0.45],["UEC",0.45],["LEU",0.45]
+  ]);
+
+  // Heuristic Volatility scores (0..1). Edit freely.
+  // Higher = more reactive; lower = more defensive/slow.
+  const VOL = Object.fromEntries([
+    ["NVDA",0.9],["AMD",0.85],["ARM",0.85],["MRVL",0.8],["MU",0.85],
+    ["XOP",0.8],["OIH",0.85],["HAL",0.75],["SLB",0.7],
+    ["ZIM",0.9],["STNG",0.75],["INSW",0.6],
+    ["CRWD",0.8],["PANW",0.65],["NET",0.75],["FTNT",0.65],
+    ["GLD",0.35],["GDX",0.6],["IAU",0.3],
+    ["LMT",0.35],["NOC",0.35],["RTX",0.4],["BA",0.6],["KTOS",0.7],["AVAV",0.65],
+    ["KIE",0.35],["AIG",0.45],["ALL",0.35]
+  ]);
+
+  // Defaults when not present in tables
+  const DEFAULT_LIQ = 0.55;
+  const DEFAULT_VOL = 0.55;
+
+  // ---------- UI ----------
+  const el = {
+    timespan: document.getElementById("timespan"),
+    sort: document.getElementById("sort"),
+    perTopic: document.getElementById("perTopic"),
+    concurrency: document.getElementById("concurrency"),
+    tz: document.getElementById("tz"),
+    lang: document.getElementById("lang"),
+    country: document.getElementById("country"),
+    customQuery: document.getElementById("customQuery"),
+    runBtn: document.getElementById("runBtn"),
+    saveBtn: document.getElementById("saveBtn"),
+    exportBtn: document.getElementById("exportBtn"),
+    clearHistoryBtn: document.getElementById("clearHistoryBtn"),
+    status: document.getElementById("status"),
+    pills: document.getElementById("pills"),
+    meta: document.getElementById("meta"),
+    history: document.getElementById("history"),
+    viewPicks: document.getElementById("viewPicks"),
+    viewHeadlines: document.getElementById("viewHeadlines"),
+    viewTickers: document.getElementById("viewTickers"),
+    viewMethod: document.getElementById("viewMethod")
+  };
+
+  let lastScan = null;
+
+  // ---------- Helpers ----------
+  const clamp01 = (x) => Math.max(0, Math.min(1, x));
+  const round1 = (x) => Math.round(x * 10) / 10;
+  const round2 = (x) => Math.round(x * 100) / 100;
+
+  function setStatus(msg, isError=false){
+    el.status.textContent = msg || "";
+    el.status.className = "status" + (isError ? " error" : "");
+  }
+  function setPills(pairs){
+    el.pills.innerHTML = "";
+    for(const [k,v] of pairs){
+      const d = document.createElement("div");
+      d.className = "pill";
+      d.textContent = `${k}: ${v}`;
+      el.pills.appendChild(d);
+    }
+  }
+  function escapeHtml(s){
+    return String(s ?? "")
+      .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;").replaceAll("'","&#039;");
+  }
+  function fmtDate(dt, tz){
+    try{
+      return new Intl.DateTimeFormat(undefined, {
+        timeZone: tz, year:"numeric", month:"2-digit", day:"2-digit",
+        hour:"2-digit", minute:"2-digit", second:"2-digit"
+      }).format(dt);
+    }catch{
+      return dt.toISOString();
+    }
+  }
+
+  // Build GDELT query: (a OR b OR "c d") + optional sourcelang/sourcecountry
+  function buildQueryFromTerms(terms, lang, country){
+    const core = "(" + terms.join(" OR ") + ")";
+    let q = core;
+    if(lang) q += ` sourcelang:${lang}`;
+    if(country) q += ` sourcecountry:${country}`;
+    return q.trim();
+  }
+
+  function buildGdeltUrl({ query, timespan, sort, maxrecords }){
+    const url = new URL(GDELT_ENDPOINT);
+    url.searchParams.set("query", query);
+    url.searchParams.set("mode", "artlist");
+    url.searchParams.set("format", "json");
+    url.searchParams.set("timespan", timespan);
+    url.searchParams.set("maxrecords", String(maxrecords));
+    if(sort) url.searchParams.set("sort", sort);
+    return url.toString();
+  }
+
+  // Concurrency-limited mapper
+  async function mapLimit(items, limit, worker){
+    const results = new Array(items.length);
+    let i = 0;
+    const runners = Array.from({length: Math.max(1, limit)}, async () => {
+      while(i < items.length){
+        const idx = i++;
+        results[idx] = await worker(items[idx], idx);
+      }
+    });
+    await Promise.all(runners);
+    return results;
+  }
+
+  // ---------- Scoring ----------
+  // Catalyst clarity: “how specific / actionable / market-relevant”
+  function catalystClarity(title){
+    const t = (title || "").toLowerCase();
+    let score = 0.20; // baseline
+    const hasNumber = /(\d+(\.\d+)?)|(%|\$|bps|basis points|million|billion|mbpd)/i.test(title || "");
+    if(hasNumber) score += 0.18;
+
+    const actionVerbs = [
+      "announces","imposes","approves","ban","bans","halts","suspends","launches","strikes","attacks",
+      "cuts","raises","hikes","slashes","warns","sanctions","tariff","export controls","ceasefire",
+      "breach","ransomware","hack","exploit","zero-day","evacuation","earthquake","flood","wildfire"
+    ];
+    for(const w of actionVerbs){
+      if(t.includes(w)) { score += 0.03; }
+    }
+
+    const specificityHints = ["opec","fed","ecb","boe","cpi","pce","brent","wti","pipeline","shipping lane","red sea","strait"];
+    for(const w of specificityHints){
+      if(t.includes(w)) { score += 0.05; }
+    }
+
+    // penalize vague listicles / opinion-y framing
+    const vague = ["what you need to know","explainer","analysis","opinion","why it matters","live updates"];
+    for(const w of vague){
+      if(t.includes(w)) { score -= 0.05; }
+    }
+
+    return clamp01(score);
+  }
+
+  // Timing: prioritize recency, but allow a 15–20 day horizon (decay slower than day-trading)
+  function timingScore(seenDateUtc, nowUtc){
+    if(!seenDateUtc || !(seenDateUtc instanceof Date) || isNaN(seenDateUtc)) return 0.55;
+    const hours = Math.max(0, (nowUtc - seenDateUtc) / 36e5);
+    const halfLifeHrs = 42; // adjust as you like
+    const score = Math.pow(0.5, hours / halfLifeHrs);
+    return clamp01(0.15 + 0.85 * score);
+  }
+
+  function tickerLiquidity(t){ return LIQ[t] ?? DEFAULT_LIQ; }
+  function tickerVol(t){ return VOL[t] ?? DEFAULT_VOL; }
+
+  // Headline -> per-sector impact (0..1), then to 1..10 score
+  function headlineImpactScore({ topicKey, title, seenDate }, nowUtc){
+    const clarity = catalystClarity(title);
+    const timing = timingScore(seenDate, nowUtc);
+
+    const sectorWeights = TOPIC_SECTOR_WEIGHTS[topicKey] || {};
+    const sectors = Object.keys(sectorWeights);
+
+    // Compute average liquidity/vol across impacted sectors’ tickers
+    let liqAvg = 0, volAvg = 0, n = 0;
+    for(const s of sectors){
+      const tickers = TICKER_GROUPS[s] || [];
+      for(const t of tickers){
+        liqAvg += tickerLiquidity(t);
+        volAvg += tickerVol(t);
+        n++;
+      }
+    }
+    liqAvg = n ? (liqAvg / n) : 0.55;
+    volAvg = n ? (volAvg / n) : 0.55;
+
+    // Weighted “probability of impact” proxy (0..1)
+    const raw = clamp01(
+      0.45 * clarity +
+      0.25 * timing +
+      0.15 * liqAvg +
+      0.15 * volAvg
+    );
+
+    // Convert to 1..10 (keep non-zero floor)
+    const score10 = Math.max(1, Math.min(10, Math.round(raw * 10)));
+    return { score10, clarity, timing, liqAvg, volAvg };
+  }
+
+  // Aggregate to tickers: sum of (headline strength * sector weight * ticker liquidity/vol mix)
+  function aggregateTickerScores(allHeadlines, nowUtc){
+    const tickerInfo = {};
+    const tickerToGroup = {};
+    for(const [g, arr] of Object.entries(TICKER_GROUPS)){
+      for(const t of arr) tickerToGroup[t] = g;
+    }
+
+    function ensure(t){
+      if(!tickerInfo[t]){
+        tickerInfo[t] = {
+          ticker:t,
+          group:tickerToGroup[t] || "unknown",
+          liq:tickerLiquidity(t),
+          vol:tickerVol(t),
+          score:0,
+          drivers:[]
+        };
+      }
+      return tickerInfo[t];
+    }
+
+    for(const h of allHeadlines){
+      const sectorWeights = TOPIC_SECTOR_WEIGHTS[h.topicKey] || {};
+      const base = h.impact01; // 0..1
+      for(const [sector, w] of Object.entries(sectorWeights)){
+        const tickers = TICKER_GROUPS[sector] || [];
+        for(const t of tickers){
+          const info = ensure(t);
+          const lv = 0.55 * info.liq + 0.45 * info.vol; // liquidity+volatility blend
+          const add = base * w * lv;
+          info.score += add;
+
+          // store headline as driver if meaningful
+          if(add > 0.035){
+            info.drivers.push({
+              add,
+              topicKey: h.topicKey,
+              title: h.title,
+              url: h.url,
+              seenDate: h.seenDate
+            });
+          }
+        }
+      }
+    }
+
+    // normalize for presentation
+    const arr = Object.values(tickerInfo);
+    const max = Math.max(0.0001, ...arr.map(x => x.score));
+    for(const x of arr){
+      x.scoreN = x.score / max;         // 0..1
+      x.score100 = Math.round(x.scoreN * 100);
+      x.drivers.sort((a,b)=>b.add-a.add);
+      x.drivers = x.drivers.slice(0,4);
+    }
+    arr.sort((a,b)=>b.score-a.score);
+    return arr;
+  }
+
+  // ---------- Fetch ----------
+  function parseGdeltSeenDate(s){
+    // GDELT typically returns "YYYY-MM-DD HH:MM:SS"
+    // Treat as UTC for scoring (good enough for relative timing).
+    if(!s) return null;
+    const iso = String(s).replace(" ", "T") + "Z";
+    const d = new Date(iso);
+    return isNaN(d) ? null : d;
+  }
+
+  async function fetchTopic(topic, opts){
+    const perTopic = opts.perTopic;
+    const lang = opts.lang;
+    const country = opts.country;
+
+    const query = opts.customQuery?.trim()
+      ? opts.customQuery.trim()
+      : buildQueryFromTerms(topic.terms, lang, country);
+
+    const url = buildGdeltUrl({
+      query,
+      timespan: opts.timespan,
+      sort: opts.sort,
+      maxrecords: perTopic
+    });
+
+    const resp = await fetch(url);
+    const text = await resp.text();
+
+    let data;
+    try { data = JSON.parse(text); }
+    catch {
+      // GDELT sometimes returns plain text errors; surface them
+      throw new Error(`Non-JSON from GDELT (HTTP ${resp.status}): ${text.slice(0,160)}`);
+    }
+
+    const articles = Array.isArray(data) ? data : (data.articles || data.data || []);
+    return { topicKey: topic.key, topicLabel: topic.label, query, url, articles };
+  }
+
+  // ---------- Render ----------
+  function setActiveTab(tab){
+    document.querySelectorAll(".tab").forEach(t=>{
+      t.classList.toggle("active", t.dataset.tab === tab);
+    });
+    el.viewPicks.style.display = tab==="picks" ? "" : "none";
+    el.viewHeadlines.style.display = tab==="headlines" ? "" : "none";
+    el.viewTickers.style.display = tab==="tickers" ? "" : "none";
+    el.viewMethod.style.display = tab==="method" ? "" : "none";
+  }
+
+  function renderMethod(){
+    el.viewMethod.innerHTML = `
+      <div class="item">
+        <div class="title">Headline score (1–10): “Probability of impact” proxy</div>
+        <div class="sub">
+          Computed from four components (all 0..1): Catalyst Clarity + Timing + Liquidity + Volatility.
+        </div>
+        <div class="scoreline">
+          <span class="badge"><span class="dot ok"></span><b>Clarity</b> derived from title specificity (numbers, actions, known macro/geopolitical triggers)</span>
+          <span class="badge"><span class="dot ok"></span><b>Timing</b> decays with age (half-life ~42 hours, tuned for 15–20 day swing sensitivity)</span>
+          <span class="badge"><span class="dot ok"></span><b>Liquidity</b> heuristic per ticker (editable table)</span>
+          <span class="badge"><span class="dot ok"></span><b>Volatility</b> heuristic per ticker (editable table)</span>
+        </div>
+        <div class="smallnote">
+          Ticker ranking aggregates all headlines using topic→sector weights and ticker (liq/vol) blend.
+          If you want “direction” (bullish/bearish) or to support shorts/options explicitly, that is an additional layer.
+        </div>
+      </div>
+    `;
+  }
+
+  function renderPicks(scan){
+    const picks = scan.topPicks;
+    if(!picks?.length){
+      el.viewPicks.innerHTML = `<div class="item">No picks (no headlines returned).</div>`;
+      return;
+    }
+
+    const tz = scan.opts.tz;
+
+    el.viewPicks.innerHTML = picks.map((p, idx) => {
+      const drivers = (p.drivers || []).map(d => {
+        const when = d.seenDate ? fmtDate(new Date(d.seenDate), tz) : "";
+        return `
+          <div class="sub" style="margin-top:6px;">
+            <span class="badge"><span class="dot ok"></span>+${round2(d.add)} driver</span>
+            <span>${escapeHtml(d.topicKey)}</span>
+            <a href="${escapeHtml(d.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(d.title)}</a>
+            <span>${escapeHtml(when)}</span>
+          </div>
+        `;
+      }).join("");
+
+      return `
+        <div class="item">
+          <div class="title">${idx+1}) ${escapeHtml(p.ticker)} <span class="badge">${escapeHtml(p.group)}</span></div>
+          <div class="sub">
+            <span class="badge"><span class="dot ok"></span><b>Setup score:</b> ${p.score100}/100</span>
+            <span class="badge"><span class="dot"></span><b>Liq:</b> ${round2(p.liq)}</span>
+            <span class="badge"><span class="dot"></span><b>Vol:</b> ${round2(p.vol)}</span>
+          </div>
+          <div class="smallnote" style="margin-top:8px;">
+            Reasoning: high cumulative sensitivity to today’s top catalysts in its sector group, plus liq/vol profile suited for a 15–20 day reaction window.
+          </div>
+          ${drivers ? `<div style="margin-top:8px;"><div class="sub"><b>Top drivers:</b></div>${drivers}</div>` : ""}
+        </div>
+      `;
+    }).join("");
+  }
+
+  function renderHeadlines(scan){
+    const tz = scan.opts.tz;
+    const blocks = scan.byTopic.map(t => {
+      const items = (t.items || []).map(h => {
+        const when = h.seenDate ? fmtDate(new Date(h.seenDate), tz) : "";
+        const dotClass = h.score10 >= 7 ? "ok" : (h.score10 <= 3 ? "bad" : "");
+        return `
+          <div class="item">
+            <div class="title">
+              <a href="${escapeHtml(h.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(h.title)}</a>
+            </div>
+            <div class="sub">
+              <span>${escapeHtml(h.domain || "")}</span>
+              <span>${escapeHtml(when)}</span>
+              <span class="badge"><span class="dot ${dotClass}"></span><b>Impact:</b> ${h.score10}/10</span>
+              <span class="badge"><b>Clarity:</b> ${round2(h.clarity)}</span>
+              <span class="badge"><b>Timing:</b> ${round2(h.timing)}</span>
+            </div>
+            <div class="smallnote mono" style="margin-top:8px; word-break:break-word;">${escapeHtml(h.url)}</div>
+          </div>
+        `;
+      }).join("");
+
+      return `
+        <div class="item">
+          <div class="title">${escapeHtml(t.topicLabel)} <span class="badge">top ${t.items.length}</span></div>
+          <div class="smallnote">Query: <span class="mono">${escapeHtml(t.query)}</span></div>
+          <div class="smallnote">Source: <a href="${escapeHtml(t.url)}" target="_blank" rel="noopener noreferrer">open in GDELT</a></div>
+          <div style="margin-top:10px;" class="results">${items || `<div class="item">No results.</div>`}</div>
+        </div>
+      `;
+    }).join("");
+
+    el.viewHeadlines.innerHTML = blocks || `<div class="item">No headlines.</div>`;
+  }
+
+  function renderTickers(scan){
+    const rows = (scan.tickerTable || []).slice(0, 40).map(x => {
+      return `
+        <div class="item">
+          <div class="title">${escapeHtml(x.ticker)} <span class="badge">${escapeHtml(x.group)}</span></div>
+          <div class="sub">
+            <span class="badge"><b>Score:</b> ${x.score100}/100</span>
+            <span class="badge"><b>Liq:</b> ${round2(x.liq)}</span>
+            <span class="badge"><b>Vol:</b> ${round2(x.vol)}</span>
+          </div>
+          ${x.drivers?.length ? `
+            <div class="smallnote" style="margin-top:8px;">
+              Drivers: ${x.drivers.map(d => `${escapeHtml(d.topicKey)} (+${round2(d.add)})`).join(", ")}
+            </div>
+          ` : `<div class="smallnote" style="margin-top:8px;">No strong drivers detected.</div>`}
+        </div>
+      `;
+    }).join("");
+    el.viewTickers.innerHTML = rows || `<div class="item">No ticker table.</div>`;
+  }
+
+  function renderAll(scan){
+    el.meta.textContent = `Scan @ ${fmtDate(new Date(scan.createdAt), scan.opts.tz)} | ${scan.countHeadlines} headlines`;
+    renderPicks(scan);
+    renderHeadlines(scan);
+    renderTickers(scan);
+    renderMethod();
+  }
+
+  // ---------- History ----------
+  const STORAGE_KEY = "trade_scanner_history_v1";
+
+  function loadHistory(){
+    const raw = localStorage.getItem(STORAGE_KEY);
+    let arr = [];
+    try { arr = raw ? JSON.parse(raw) : []; } catch {}
+    return Array.isArray(arr) ? arr : [];
+  }
+
+  function saveHistory(arr){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(arr.slice(0, 30)));
+  }
+
+  function refreshHistoryDropdown(){
+    const arr = loadHistory();
+    el.history.innerHTML = "";
+    const opt0 = document.createElement("option");
+    opt0.value = "";
+    opt0.textContent = "— Select saved scan —";
+    el.history.appendChild(opt0);
+
+    for(let i=0;i<arr.length;i++){
+      const s = arr[i];
+      const o = document.createElement("option");
+      o.value = String(i);
+      const dt = new Date(s.createdAt);
+      const top = (s.topPicks || []).map(x=>x.ticker).join(", ");
+      o.textContent = `${i+1}) ${dt.toLocaleString()} | Top: ${top || "—"}`;
+      el.history.appendChild(o);
+    }
+  }
+
+  // ---------- Main run ----------
+  async function runScan(){
+    setStatus("");
+    el.runBtn.disabled = true;
+    el.saveBtn.disabled = true;
+    el.exportBtn.disabled = true;
+
+    const nowUtc = new Date();
+    const opts = {
+      timespan: el.timespan.value,
+      sort: el.sort.value,
+      perTopic: Math.max(1, Math.min(25, Number(el.perTopic.value || 5))),
+      concurrency: Math.max(1, Math.min(10, Number(el.concurrency.value || 4))),
+      tz: el.tz.value || "Asia/Jerusalem",
+      lang: el.lang.value.trim(),
+      country: el.country.value.trim(),
+      customQuery: el.customQuery.value
+    };
+
+    setPills([
+      ["timespan", opts.timespan],
+      ["sort", opts.sort || "relevance"],
+      ["perTopic", opts.perTopic],
+      ["concurrency", opts.concurrency],
+      ["sourcelang", opts.lang || "—"],
+      ["sourcecountry", opts.country || "—"]
+    ]);
+
+    setStatus("Fetching headlines from GDELT…");
+
+    let byTopic;
+    try{
+      byTopic = await mapLimit(TOPICS, opts.concurrency, async (topic) => {
+        try{
+          const r = await fetchTopic(topic, opts);
+          return { ...r, error: null };
+        }catch(e){
+          return { topicKey: topic.key, topicLabel: topic.label, query: "", url: "", items: [], error: String(e.message || e) };
+        }
+      });
+    }catch(e){
+      setStatus(String(e.message || e), true);
+      el.runBtn.disabled = false;
+      return;
+    }
+
+    // Normalize & score headlines
+    const all = [];
+    const scoredByTopic = byTopic.map(t => {
+      const items = (t.articles || []).map(a => {
+        const title = a.title || "(no title)";
+        const url = a.url || a.url_mobile || "#";
+        const domain = a.domain || "";
+        const seenDate = parseGdeltSeenDate(a.seendate || a.seenDate || "");
+        const { score10, clarity, timing, liqAvg, volAvg } = headlineImpactScore({
+          topicKey: t.topicKey, title, seenDate
+        }, nowUtc);
+
+        const impact01 = clamp01(score10 / 10);
+
+        const h = {
+          topicKey: t.topicKey,
+          topicLabel: t.topicLabel,
+          title, url, domain,
+          seenDate: seenDate ? seenDate.toISOString() : null,
+          score10, impact01,
+          clarity, timing,
+          liqAvg, volAvg
+        };
+        all.push(h);
+        return h;
+      });
+
+      return {
+        topicKey: t.topicKey,
+        topicLabel: t.topicLabel,
+        query: t.query,
+        url: t.url,
+        error: t.error,
+        items
+      };
+    });
+
+    // Aggregate to tickers
+    const tickerTable = aggregateTickerScores(all, nowUtc);
+    const topPicks = tickerTable.slice(0,3);
+
+    const scan = {
+      createdAt: nowUtc.toISOString(),
+      opts,
+      byTopic: scoredByTopic,
+      countHeadlines: all.length,
+      tickerTable,
+      topPicks
+    };
+
+    lastScan = scan;
+
+    // Render
+    if(all.length === 0){
+      setStatus("No headlines returned. Try a longer timespan or remove filters.", true);
+    } else {
+      const errCount = scoredByTopic.filter(x=>x.error).length;
+      setStatus(errCount ? `Completed with ${errCount} topic errors (see Headlines tab).` : "Completed.");
+    }
+
+    renderAll(scan);
+    el.runBtn.disabled = false;
+    el.saveBtn.disabled = false;
+    el.exportBtn.disabled = false;
+  }
+
+  // ---------- Export / Save ----------
+  function saveCurrent(){
+    if(!lastScan) return;
+    const arr = loadHistory();
+    arr.unshift(lastScan);
+    saveHistory(arr);
+    refreshHistoryDropdown();
+    setStatus("Saved to History.");
+  }
+
+  function exportJson(){
+    if(!lastScan) return;
+    const blob = new Blob([JSON.stringify(lastScan, null, 2)], { type:"application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `scan_${new Date(lastScan.createdAt).toISOString().replaceAll(":","-")}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function clearHistory(){
+    localStorage.removeItem(STORAGE_KEY);
+    refreshHistoryDropdown();
+    setStatus("History cleared.");
+  }
+
+  function loadFromHistoryIndex(idx){
+    const arr = loadHistory();
+    const scan = arr[idx];
+    if(!scan) return;
+    lastScan = scan;
+    setStatus("Loaded saved scan (no re-fetch).");
+    renderAll(scan);
+    el.saveBtn.disabled = false;
+    el.exportBtn.disabled = false;
+  }
+
+  // ---------- Events ----------
+  document.querySelectorAll(".tab").forEach(t=>{
+    t.addEventListener("click", () => setActiveTab(t.dataset.tab));
+  });
+
+  el.runBtn.addEventListener("click", runScan);
+  el.saveBtn.addEventListener("click", saveCurrent);
+  el.exportBtn.addEventListener("click", exportJson);
+  el.clearHistoryBtn.addEventListener("click", clearHistory);
+
+  el.history.addEventListener("change", () => {
+    const v = el.history.value;
+    if(!v) return;
+    loadFromHistoryIndex(Number(v));
+  });
+
+  // Init
+  refreshHistoryDropdown();
+  setActiveTab("picks");
+  renderMethod();
+})();
+</script>
+</body>
+</html>
