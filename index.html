@@ -953,4 +953,453 @@
 
     const kpi = `
       <div class="kpi">
-        <div class="box"><b>raw headlines</
+        <div class="box"><b>raw headlines</b><span>${scan.countHeadlines}</span></div>
+        <div class="box"><b>kept (catalysts)</b><span>${dec.kept.length} (min ${RUNTIME.minKept})</span></div>
+        <div class="box"><b>strong catalysts</b><span>${dec.strong.length} (cut score≥${RUNTIME.strongScoreCut}, clarity≥${RUNTIME.strongClarityCut})</span></div>
+        <div class="box"><b>avgTopK</b><span>${round2(dec.avgTopK)} (min ${round2(RUNTIME.minAvgTrade01)})</span></div>
+      </div>
+    `;
+
+    const picks = (scan.topPicks || []).filter(p => p.score > 0).slice(0,3);
+
+    const picksBlock = picks.length ? picks.map((p, idx) => {
+      const itype = getInstrumentType(p.ticker);
+      const drivers = (p.drivers || []).map((d) => {
+        const when = d.seenDate ? fmtDate(new Date(d.seenDate), tz) : "";
+        return `
+          <div class="sub" style="margin-top:6px;">
+            <span class="badge"><span class="dot ok"></span>+${round2(d.add)} driver</span>
+            <span>${escapeHtml(d.topicKey)}</span>
+            <a href="${escapeHtml(d.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(d.title)}</a>
+            <span>${escapeHtml(when)}</span>
+          </div>
+        `;
+      }).join("");
+
+      const priceId = `price_${p.ticker}_${idx}`;
+      const outId = `plan_${p.ticker}_${idx}`;
+
+      return `
+        <div class="item">
+          <div class="title">${idx+1}) ${escapeHtml(p.ticker)} <span class="badge">${escapeHtml(p.group)}</span> <span class="badge">${itype}</span></div>
+          <div class="sub">
+            <span class="badge"><span class="dot ok"></span><b>Setup score:</b> ${p.score100}/100</span>
+            <span class="badge"><b>Liq:</b> ${round2(p.liq)}</span>
+            <span class="badge"><b>Vol:</b> ${round2(p.vol)}</span>
+          </div>
+
+          <div class="smallnote" style="margin-top:8px;">
+            Reasoning: this ticker has the highest cumulative sensitivity to the strongest catalysts in its mapped sector group, given its liquidity/volatility profile.
+            If you see repeats (e.g., XOP), check Diagnostics: it may reflect genuine sector dominance in today’s headline mix.
+          </div>
+
+          <div class="hr"></div>
+
+          <div class="title">Discipline Trade Plan (manual price input)</div>
+          <div class="row">
+            <div>
+              <label>Enter current price (USD)</label>
+              <input id="${priceId}" type="number" step="0.01" placeholder="e.g., 39.25" />
+            </div>
+            <div>
+              <label>Capital used (USD)</label>
+              <input type="text" value="$${escapeHtml(String(el.capital.value || "1500"))}" disabled />
+            </div>
+          </div>
+          <div id="${outId}" class="smallnote warnbox" style="margin-top:10px; padding:10px; border-radius:12px;">
+            Enter a price to generate LIMIT entry + OCO exits + fees/tax math.
+          </div>
+
+          ${drivers ? `<div style="margin-top:10px;"><div class="sub"><b>Top drivers:</b></div>${drivers}</div>` : ""}
+        </div>
+      `;
+    }).join("") : `
+      <div class="item warnbox">
+        <div class="title">No positive-scoring picks</div>
+        <div class="smallnote">
+          With today’s trusted-only headlines, the model did not find any long-bias candidates (positive sensitivity).
+          Try increasing lookback (12h → 1day) or switching to Idea Mode for exploratory candidates.
+        </div>
+      </div>
+    `;
+
+    const header = `
+      <div class="item ${dec.decision==="TRADE" ? "okbox" : (dec.decision==="IDEA MODE" ? "warnbox" : "badbox")}">
+        <div class="title">Decision ${decisionBadge}</div>
+        <div class="sub">
+          <span class="badge"><b>Strictness:</b> ${Math.round(RUNTIME.strictness*100)}%</span>
+          <span class="badge"><b>Trusted-only:</b> enforced</span>
+          <span class="badge"><b>Language:</b> english</span>
+          <span class="badge"><b>Version:</b> ${escapeHtml(VERSION)}</span>
+        </div>
+        ${kpi}
+        <div class="hr"></div>
+        ${reasons}
+        <div class="smallnote" style="margin-top:10px;">
+          Policy reminder: one active trade at a time; use OCO; honor the time stop.
+        </div>
+      </div>
+    `;
+
+    el.viewDecision.innerHTML = header + picksBlock;
+
+    // After render, attach plan calculators
+    picks.forEach((p, idx) => {
+      const priceId = `price_${p.ticker}_${idx}`;
+      const outId = `plan_${p.ticker}_${idx}`;
+      const priceEl = document.getElementById(priceId);
+      const outEl = document.getElementById(outId);
+
+      if(!priceEl || !outEl) return;
+
+      const instrumentType = getInstrumentType(p.ticker);
+
+      const recalc = () => {
+        const price = Number(priceEl.value);
+        const cap = Number(el.capital.value || 1500);
+        const stockTp = Number(el.stockTp.value || 22);
+
+        const plan = computeTradePlan({
+          ticker: p.ticker,
+          instrumentType,
+          manualPrice: price,
+          capitalUsd: cap,
+          stockTpPct: stockTp
+        });
+
+        if(!plan.ok){
+          outEl.className = "smallnote warnbox";
+          outEl.style.marginTop = "10px";
+          outEl.style.padding = "10px";
+          outEl.style.borderRadius = "12px";
+          outEl.innerHTML = escapeHtml(plan.error || "Enter inputs.");
+          return;
+        }
+
+        const entryStyle = instrumentType === "ETF" ? "Entry pullback: -0.3%" : "Entry pullback: -0.7%";
+        const tpRule = instrumentType === "ETF" ? "TP: +15%" : `TP: +${Math.round((plan.tp/plan.entry - 1)*100)}% (stock TP setting)`;
+        const slRule = instrumentType === "ETF" ? "SL: -8%" : "SL: -10%";
+        const oco = `
+          BUY LIMIT ${p.ticker}: <b>$${plan.entry}</b><br/>
+          OCO exits:<br/>
+          • Take-Profit LIMIT: <b>$${plan.tp}</b><br/>
+          • Stop-Loss STOP-LIMIT: stop <b>$${plan.slStop}</b>, limit <b>$${plan.slLimit}</b><br/>
+          Time stop: <b>${plan.timeStop}</b> (exit if TP/SL not hit).<br/>
+        `;
+
+        const tpLine = `
+          TP scenario (net): gross $${plan.tpStats.gross}, fees $${plan.fees}, tax $${plan.tpStats.tax} → <b>$${plan.tpStats.netAfterTax}</b>
+        `;
+        const slLine = `
+          SL scenario (net): gross $${plan.slStats.gross}, fees $${plan.fees} → <b>$${plan.slStats.netAfterTax}</b>
+        `;
+
+        outEl.className = "smallnote okbox";
+        outEl.style.marginTop = "10px";
+        outEl.style.padding = "10px";
+        outEl.style.borderRadius = "12px";
+        outEl.innerHTML = `
+          <div class="sub">
+            <span class="badge"><span class="dot ok"></span><b>${instrumentType}</b></span>
+            <span class="badge"><b>Shares:</b> ${plan.shares}</span>
+            <span class="badge"><b>Notional:</b> $${plan.notional}</span>
+            <span class="badge"><b>Fees:</b> $${plan.fees}</span>
+            <span class="badge"><b>Tax:</b> 25% on gains</span>
+          </div>
+          <div class="smallnote" style="margin-top:8px;">
+            <b>${entryStyle}</b> | ${tpRule} | ${slRule}
+          </div>
+          <div class="smallnote" style="margin-top:8px;">
+            ${oco}
+          </div>
+          <div class="smallnote" style="margin-top:8px;">
+            ${tpLine}<br/>
+            ${slLine}
+          </div>
+        `;
+      };
+
+      priceEl.addEventListener("input", recalc);
+    });
+  }
+
+  function renderAll(scan){
+    el.meta.textContent = `Scan @ ${fmtDate(new Date(scan.createdAt), scan.opts.tz)} | headlines: ${scan.countHeadlines} | mode: ${scan.decisionMetrics.decision}`;
+    renderDecision(scan);
+    renderHeadlines(scan);
+    renderTickers(scan);
+    renderDiagnostics(scan);
+    renderMethod();
+  }
+
+  // ---------- History ----------
+  const STORAGE_KEY = "trade_scanner_history_v6";
+  const DOMAINS_KEY = "trade_scanner_trusted_domains_v1";
+
+  function loadHistory(){
+    const raw = localStorage.getItem(STORAGE_KEY);
+    let arr = [];
+    try { arr = raw ? JSON.parse(raw) : []; } catch {}
+    return Array.isArray(arr) ? arr : [];
+  }
+
+  function saveHistory(arr){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(arr.slice(0, 30)));
+  }
+
+  function refreshHistoryDropdown(){
+    const arr = loadHistory();
+    el.history.innerHTML = "";
+    const opt0 = document.createElement("option");
+    opt0.value = "";
+    opt0.textContent = "— Select saved scan —";
+    el.history.appendChild(opt0);
+
+    for(let i=0;i<arr.length;i++){
+      const s = arr[i];
+      const o = document.createElement("option");
+      o.value = String(i);
+      const dt = new Date(s.createdAt);
+      const top = (s.topPicks || []).map(x=>x.ticker).join(", ");
+      o.textContent = `${i+1}) ${dt.toLocaleString()} | Top: ${top || "—"}`;
+      el.history.appendChild(o);
+    }
+  }
+
+  function clearHistory(){
+    localStorage.removeItem(STORAGE_KEY);
+    refreshHistoryDropdown();
+    setStatus("History cleared.");
+  }
+
+  function loadFromHistoryIndex(idx){
+    const arr = loadHistory();
+    const scan = arr[idx];
+    if(!scan) return;
+    lastScan = scan;
+    setStatus("Loaded saved scan (no re-fetch).");
+    renderAll(scan);
+    el.saveBtn.disabled = false;
+    el.exportBtn.disabled = false;
+  }
+
+  // ---------- Export / Save ----------
+  function saveCurrent(){
+    if(!lastScan) return;
+    const arr = loadHistory();
+    arr.unshift(lastScan);
+    saveHistory(arr);
+    refreshHistoryDropdown();
+    setStatus("Saved to History.");
+  }
+
+  function exportJson(){
+    if(!lastScan) return;
+    const blob = new Blob([JSON.stringify(lastScan, null, 2)], { type:"application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `scan_${new Date(lastScan.createdAt).toISOString().replaceAll(":","-")}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  // ---------- Domains storage ----------
+  function loadDomains(){
+    const raw = localStorage.getItem(DOMAINS_KEY);
+    if(!raw) return TRUSTED_DOMAINS_DEFAULT;
+    try{
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) && arr.length ? arr : TRUSTED_DOMAINS_DEFAULT;
+    }catch{
+      return TRUSTED_DOMAINS_DEFAULT;
+    }
+  }
+
+  function saveDomains(domains){
+    localStorage.setItem(DOMAINS_KEY, JSON.stringify(domains));
+  }
+
+  function resetDomains(){
+    el.trustedDomains.value = TRUSTED_DOMAINS_DEFAULT.join("\n");
+    saveDomains(TRUSTED_DOMAINS_DEFAULT);
+    setStatus("Trusted domain list reset.");
+  }
+
+  function persistDomainsFromUI(){
+    const domains = parseDomains(el.trustedDomains.value);
+    if(domains.length < 5){
+      setStatus("Domain list too small. Add more trusted domains or reset.", true);
+      return;
+    }
+    saveDomains(domains);
+    setStatus(`Saved trusted domains (${domains.length}).`);
+  }
+
+  // ---------- Main run ----------
+  async function runScan(){
+    applyStrictnessFromUI();
+    setStatus("");
+    el.runBtn.disabled = true;
+    el.saveBtn.disabled = true;
+    el.exportBtn.disabled = true;
+
+    const nowUtc = new Date();
+
+    const trustedDomains = parseDomains(el.trustedDomains.value);
+    if(trustedDomains.length < 5){
+      setStatus("Trusted domains list is empty/too small. Reset it and try again.", true);
+      el.runBtn.disabled = false;
+      return;
+    }
+
+    const opts = {
+      timespan: el.timespan.value,
+      sort: el.sort.value,
+      perTopic: Math.max(1, Math.min(25, Number(el.perTopic.value || 5))),
+      concurrency: Math.max(1, Math.min(10, Number(el.concurrency.value || 4))),
+      tz: el.tz.value || "Asia/Jerusalem",
+      country: (el.country.value || "").trim(),
+      customQuery: el.customQuery.value || "",
+      trustedDomains
+    };
+
+    setPills([
+      ["timespan", opts.timespan],
+      ["sort", opts.sort || "relevance"],
+      ["perTopic", opts.perTopic],
+      ["concurrency", opts.concurrency],
+      ["sourcelang", "english (locked)"],
+      ["trustedDomains", trustedDomains.length]
+    ]);
+
+    setStatus("Fetching trusted English headlines from GDELT…");
+
+    let byTopic;
+    try{
+      byTopic = await mapLimit(TOPICS, opts.concurrency, async (topic) => {
+        try{
+          const r = await fetchTopic(topic, opts);
+          return { ...r, error: null };
+        }catch(e){
+          return { topicKey: topic.key, topicLabel: topic.label, query: "", url: "", articles: [], error: String(e.message || e) };
+        }
+      });
+    }catch(e){
+      setStatus(String(e.message || e), true);
+      el.runBtn.disabled = false;
+      return;
+    }
+
+    // Normalize & score headlines
+    const all = [];
+    const scoredByTopic = byTopic.map(t => {
+      const items = (t.articles || []).map(a => {
+        const title = a.title || "(no title)";
+        const url = a.url || a.url_mobile || "#";
+        const domain = a.domain || "";
+        const seenDate = parseGdeltSeenDate(a.seendate || a.seenDate || "");
+
+        const { score10, clarity, timing } = headlineImpactScore({
+          topicKey: t.topicKey, title, seenDate
+        }, nowUtc);
+
+        const trade01 = clamp01(score10 / 10);
+        const soft = isSoftHeadline(title);
+
+        const h = {
+          topicKey: t.topicKey,
+          topicLabel: t.topicLabel,
+          title, url, domain,
+          seenDate: seenDate ? seenDate.toISOString() : null,
+          score10,
+          trade01,
+          clarity, timing,
+          soft
+        };
+        all.push(h);
+        return h;
+      });
+
+      return {
+        topicKey: t.topicKey,
+        topicLabel: t.topicLabel,
+        query: t.query,
+        url: t.url,
+        error: t.error,
+        items
+      };
+    });
+
+    // Decision metrics computed from all headlines
+    const decisionMetrics = computeDecisionMetrics(all);
+
+    // For ticker scoring, use "kept" headlines (catalysts) in strict modes; in idea mode, use all.
+    const scoringHeadlines = RUNTIME.ideaMode ? all : decisionMetrics.kept;
+
+    const { tickerTable, groupShares } = aggregateTickerScores(scoringHeadlines);
+
+    // Top picks: purely by score (no artificial de-duplication)
+    const topPicks = tickerTable.slice(0, 3);
+
+    const scan = {
+      createdAt: nowUtc.toISOString(),
+      opts,
+      byTopic: scoredByTopic,
+      countHeadlines: all.length,
+      decisionMetrics,
+      tickerTable,
+      groupShares,
+      topPicks
+    };
+
+    lastScan = scan;
+
+    const errCount = scoredByTopic.filter(x=>x.error).length;
+    if(all.length === 0){
+      setStatus("No headlines returned. Increase lookback or adjust trusted domains.", true);
+    } else if(errCount){
+      setStatus(`Completed with ${errCount} topic errors (see Headlines tab).`, true);
+    } else {
+      setStatus("Completed.");
+    }
+
+    renderAll(scan);
+    el.runBtn.disabled = false;
+    el.saveBtn.disabled = false;
+    el.exportBtn.disabled = false;
+  }
+
+  // ---------- Events ----------
+  document.querySelectorAll(".tab").forEach(t=>{
+    t.addEventListener("click", () => setActiveTab(t.dataset.tab));
+  });
+
+  el.strictness.addEventListener("input", applyStrictnessFromUI);
+
+  el.runBtn.addEventListener("click", runScan);
+  el.saveBtn.addEventListener("click", saveCurrent);
+  el.exportBtn.addEventListener("click", exportJson);
+  el.clearHistoryBtn.addEventListener("click", clearHistory);
+
+  el.history.addEventListener("change", () => {
+    const v = el.history.value;
+    if(!v) return;
+    loadFromHistoryIndex(Number(v));
+  });
+
+  el.resetDomainsBtn.addEventListener("click", resetDomains);
+  el.saveDomainsBtn.addEventListener("click", persistDomainsFromUI);
+
+  // Init
+  el.trustedDomains.value = loadDomains().join("\n");
+  refreshHistoryDropdown();
+  applyStrictnessFromUI();
+  setActiveTab("decision");
+  renderMethod();
+})();
+</script>
+</body>
+</html>
