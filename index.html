@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Event-Driven Trade Advisor (GDELT • English • Trusted Domains)</title>
+  <title>Event-Driven Trade Advisor (GDELT • English • Trusted Filter)</title>
   <style>
     :root{
       --bg:#0b0f17; --panel:#0e162a; --panel2:#0b1020;
@@ -72,10 +72,10 @@
 
 <body>
 <header>
-  <h1>Event-Driven Trade Advisor <span class="badge"><span class="dot ok"></span>Free • English • Trusted</span></h1>
+  <h1>Event-Driven Trade Advisor <span class="badge"><span class="dot ok"></span>Free • English • Trusted Filter</span></h1>
   <p>
-    Uses GDELT DOC 2.0 to fetch headlines (English-only + trusted-domain allowlist), scores tradability proxies, ranks top sensitivity tickers,
-    and generates a compliant trade plan using manual price input (no paid APIs). Research tool only.
+    Fetches GDELT DOC 2.0 (English-only) and filters results locally to an allowlist of trusted domains (avoids GDELT “query too long” errors).
+    Generates a discipline trade plan using manual price input. Research tool only.
   </p>
 </header>
 
@@ -107,7 +107,7 @@
 
     <div class="row3">
       <div>
-        <label>Headlines / topic</label>
+        <label>Headlines / topic (after filter)</label>
         <input id="perTopic" type="number" min="1" max="25" value="5" />
       </div>
       <div>
@@ -143,13 +143,24 @@
       <option value="custom">Custom allowlist (edit below)</option>
     </select>
 
-    <label>Domain matching</label>
+    <label>Domain matching (local filter)</label>
     <select id="domainMatch">
-      <option value="broad" selected>Broad match (recommended, fewer “no results”)</option>
-      <option value="exact">Exact match (can produce 0 results)</option>
+      <option value="broad" selected>Broad match (recommended)</option>
+      <option value="exact">Exact match</option>
     </select>
 
-    <label>Trusted domains allowlist (ENFORCED)</label>
+    <label>Oversample factor (fetch more before filtering)</label>
+    <select id="oversample">
+      <option value="4">x4</option>
+      <option value="6" selected>x6</option>
+      <option value="8">x8</option>
+      <option value="10">x10</option>
+    </select>
+    <div class="smallnote">
+      Because we filter locally, the app fetches more, then keeps only trusted domains.
+    </div>
+
+    <label>Trusted domains allowlist (FILTERED locally)</label>
     <textarea id="trustedDomains"></textarea>
 
     <div class="row">
@@ -158,13 +169,13 @@
     </div>
 
     <div class="smallnote">
-      If you get 0 headlines: switch Domain matching to <b>Broad</b>, increase Lookback (12h → 1day), or use Expanded trusted.
+      If you still get 0 headlines: increase Lookback (12h → 1day), raise Oversample (x6 → x10), or remove the country filter.
     </div>
 
     <label>Optional: custom topic query override (advanced)</label>
     <textarea id="customQuery" placeholder='Leave blank. Example: ("export controls" OR sanctions OR tariff)'></textarea>
     <div class="smallnote">
-      Even with custom query: English-only and domain allowlist are always appended.
+      This only replaces the topic terms. English-only stays enforced in the query.
     </div>
 
     <div class="actions">
@@ -229,12 +240,10 @@
 
 <script>
 (() => {
-  // -------------------- Core constants --------------------
-  const VERSION = "v7-broad-domain-fix";
+  const VERSION = "v8-local-domain-filter";
   const GDELT_ENDPOINT = "https://api.gdeltproject.org/api/v2/doc/doc";
   const LOCKED_SOURCELANG = "english";
 
-  // Trusted domain presets
   const PRESET_CORE = [
     "reuters.com","apnews.com","bloomberg.com","ft.com","wsj.com","cnbc.com",
     "economist.com","marketwatch.com","barrons.com"
@@ -245,7 +254,6 @@
     "opec.org","usgs.gov","noaa.gov","imf.org","worldbank.org"
   ];
 
-  // Expanded: Core + major global outlets + official sources
   const PRESET_EXPANDED = [
     ...new Set([
       ...PRESET_CORE,
@@ -256,7 +264,6 @@
     ])
   ];
 
-  // Instruments universe
   const TICKER_GROUPS = {
     defense: ["PPA","ITA","LMT","NOC","GD","RTX","BA","HII","LHX","TDG","AVAV","KTOS"],
     cyber: ["CIBR","HACK","PANW","CRWD","FTNT","ZS","OKTA","NET"],
@@ -273,7 +280,6 @@
     "PPA","ITA","CIBR","HACK","SMH","SOXX","XLE","XOP","OIH","KIE","URNM","URA","PHO","MOO","DBA","GLD","IAU","GDX"
   ]);
 
-  // Topics
   const TOPICS = [
     { key:"geopolitics", label:"geopolitics", terms:['geopolitics','"regional tensions"','"border clash"','"military buildup"','"diplomatic crisis"'] },
     { key:"sanctions", label:"sanctions", terms:['sanctions','"export controls"','blacklist','"secondary sanctions"','"asset freeze"'] },
@@ -292,7 +298,6 @@
     { key:"oil", label:"oil", terms:['"crude oil"','Brent','WTI','"oil prices"','"oil supply"'] }
   ];
 
-  // Topic -> sector weights (beneficiary long bias)
   const TOPIC_SECTOR_WEIGHTS = {
     geopolitics: { defense:0.8, energy:0.6, shipping:0.5, gold:0.6, insurers:0.2 },
     sanctions:   { energy:0.5, shipping:0.5, defense:0.4, semis:0.25, gold:0.3 },
@@ -311,7 +316,6 @@
     oil:         { energy:0.85, shipping:0.3 }
   };
 
-  // Liquidity heuristic
   const LIQ = Object.fromEntries([
     ["PPA",0.75],["ITA",0.8],["CIBR",0.8],["HACK",0.7],["SMH",0.85],["SOXX",0.85],
     ["XLE",0.9],["XOP",0.75],["OIH",0.6],["KIE",0.65],["URNM",0.55],["URA",0.65],
@@ -322,7 +326,6 @@
     ["ZIM",0.6],["DAC",0.45],["UEC",0.45],["LEU",0.45]
   ]);
 
-  // Volatility heuristic
   const VOL = Object.fromEntries([
     ["NVDA",0.9],["AMD",0.85],["ARM",0.85],["MRVL",0.8],["MU",0.85],
     ["XOP",0.8],["OIH",0.85],["HAL",0.75],["SLB",0.7],
@@ -336,7 +339,6 @@
   const DEFAULT_LIQ = 0.55;
   const DEFAULT_VOL = 0.55;
 
-  // Runtime discipline gates
   const RUNTIME = {
     strictness: 0.70,
     ideaMode: false,
@@ -347,7 +349,6 @@
     requireStrong: true
   };
 
-  // -------------------- UI refs --------------------
   const el = {
     timespan: document.getElementById("timespan"),
     sort: document.getElementById("sort"),
@@ -359,6 +360,7 @@
     country: document.getElementById("country"),
     domainPreset: document.getElementById("domainPreset"),
     domainMatch: document.getElementById("domainMatch"),
+    oversample: document.getElementById("oversample"),
     trustedDomains: document.getElementById("trustedDomains"),
     resetDomainsBtn: document.getElementById("resetDomainsBtn"),
     saveDomainsBtn: document.getElementById("saveDomainsBtn"),
@@ -382,7 +384,6 @@
 
   let lastScan = null;
 
-  // -------------------- Helpers --------------------
   const clamp01 = (x) => Math.max(0, Math.min(1, x));
   const round2 = (x) => Math.round(x * 100) / 100;
   const round4 = (x) => Math.round(x * 10000) / 10000;
@@ -430,8 +431,7 @@
   }
 
   function parseDomains(text){
-    const raw = String(text || "");
-    return raw
+    return String(text || "")
       .split(/[\n,;]+/g)
       .map(x => normalizeDomain(x))
       .filter(Boolean)
@@ -442,56 +442,6 @@
     if(preset === "core") return PRESET_CORE.slice();
     if(preset === "official") return PRESET_OFFICIAL.slice();
     return PRESET_EXPANDED.slice();
-  }
-
-  // BROAD vs EXACT domain clauses
-  // Broad: domain:<value> plus a www.<value> variant; this is the recommended fix for "0 results"
-  // Exact: domainis:<value> and domainis:www.<value>
-  function domainAllowlistClause(domains, matchMode){
-    const op = (matchMode === "exact") ? "domainis:" : "domain:";
-    const parts = [];
-    const seen = new Set();
-
-    for(const raw of domains || []){
-      const dom = normalizeDomain(raw);
-      if(!dom) continue;
-
-      const a = `${op}${dom}`;
-      if(!seen.has(a)){ seen.add(a); parts.push(a); }
-
-      if(!dom.startsWith("www.")){
-        const b = `${op}www.${dom}`;
-        if(!seen.has(b)){ seen.add(b); parts.push(b); }
-      }
-    }
-
-    return parts.length ? "(" + parts.join(" OR ") + ")" : "";
-  }
-
-  function buildQueryFromTerms(terms, opts){
-    const core = "(" + terms.join(" OR ") + ")";
-    return buildFinalQuery(core, opts);
-  }
-
-  function buildQueryFromCustom(custom, opts){
-    const core = "(" + custom.trim() + ")";
-    return buildFinalQuery(core, opts);
-  }
-
-  function buildFinalQuery(core, opts){
-    let q = core;
-
-    // enforce English
-    q += ` sourcelang:${LOCKED_SOURCELANG}`;
-
-    // optional country
-    if(opts.country) q += ` sourcecountry:${opts.country}`;
-
-    // enforce domains
-    const allow = domainAllowlistClause(opts.trustedDomains, opts.domainMatch);
-    if(allow) q += ` ${allow}`;
-
-    return q.trim();
   }
 
   function buildGdeltUrl({ query, timespan, sort, maxrecords }){
@@ -525,17 +475,14 @@
     return isNaN(d) ? null : d;
   }
 
-  // -------------------- Strictness mapping --------------------
   function applyStrictnessFromUI(){
     const sPct = Math.max(0, Math.min(100, Number(el.strictness.value || 70)));
     const s = sPct / 100;
 
     RUNTIME.strictness = s;
     RUNTIME.ideaMode = (s <= 0.05);
-
-    // Discipline gates tuned for trusted-only input
-    RUNTIME.minAvgTrade01 = RUNTIME.ideaMode ? 0 : (0.18 + s * (0.45 - 0.18)); // 0.18..0.45
-    RUNTIME.minKept = RUNTIME.ideaMode ? 1 : Math.round(6 + s * 10);           // 6..16
+    RUNTIME.minAvgTrade01 = RUNTIME.ideaMode ? 0 : (0.18 + s * (0.45 - 0.18));
+    RUNTIME.minKept = RUNTIME.ideaMode ? 1 : Math.round(6 + s * 10);
     RUNTIME.strongScoreCut   = RUNTIME.ideaMode ? 4 : (s >= 0.70 ? 6 : (s >= 0.45 ? 5 : 4));
     RUNTIME.strongClarityCut = RUNTIME.ideaMode ? 0.30 : (s >= 0.70 ? 0.45 : (s >= 0.45 ? 0.38 : 0.30));
     RUNTIME.requireStrong = !RUNTIME.ideaMode && (s >= 0.40);
@@ -543,7 +490,6 @@
     el.modeLabel.textContent = RUNTIME.ideaMode ? "Idea Mode" : (s >= 0.75 ? "Strict" : (s >= 0.45 ? "Balanced" : "Lenient"));
   }
 
-  // -------------------- Scoring --------------------
   function tickerLiquidity(t){ return LIQ[t] ?? DEFAULT_LIQ; }
   function tickerVol(t){ return VOL[t] ?? DEFAULT_VOL; }
   function getInstrumentType(t){ return ETF_SET.has(t) ? "ETF" : "Stock"; }
@@ -557,7 +503,6 @@
   function catalystClarity(title){
     const t = (title || "").toLowerCase();
     let score = 0.18;
-
     const hasNumber = /(\d+(\.\d+)?)|(%|\$|bps|basis points|million|billion|mbpd)/i.test(title || "");
     if(hasNumber) score += 0.18;
 
@@ -579,7 +524,6 @@
     for(const w of vague){
       if(t.includes(w)) score -= 0.05;
     }
-
     return clamp01(score);
   }
 
@@ -610,16 +554,9 @@
     liqAvg = n ? (liqAvg / n) : 0.55;
     volAvg = n ? (volAvg / n) : 0.55;
 
-    const raw = clamp01(
-      0.45 * clarity +
-      0.25 * timing +
-      0.15 * liqAvg +
-      0.15 * volAvg
-    );
-
+    const raw = clamp01(0.45 * clarity + 0.25 * timing + 0.15 * liqAvg + 0.15 * volAvg);
     const score10 = Math.max(1, Math.min(10, Math.round(raw * 10)));
     const trade01 = clamp01(score10 / 10);
-
     return { score10, trade01, clarity, timing };
   }
 
@@ -644,7 +581,7 @@
 
     if(RUNTIME.ideaMode){
       decision = "IDEA MODE";
-      reasons.push("Strictness ~0: showing top sensitivity candidates even if strict discipline would say NO TRADE.");
+      reasons.push("Strictness ~0: showing candidates even if strict discipline gates fail.");
       return { kept, strong, avgTopK, K, decision, reasons };
     }
 
@@ -656,7 +593,6 @@
       decision = "TRADE";
       reasons.push("Catalyst density and tradability meet discipline gates.");
     }
-
     return { kept, strong, avgTopK, K, decision, reasons };
   }
 
@@ -666,19 +602,11 @@
     for(const [g, arr] of Object.entries(TICKER_GROUPS)){
       for(const t of arr) tickerToGroup[t] = g;
     }
-
     const groupContrib = Object.fromEntries(Object.keys(TICKER_GROUPS).map(g => [g, 0]));
 
     function ensure(t){
       if(!tickerInfo[t]){
-        tickerInfo[t] = {
-          ticker:t,
-          group:tickerToGroup[t] || "unknown",
-          liq:tickerLiquidity(t),
-          vol:tickerVol(t),
-          score:0,
-          drivers:[]
-        };
+        tickerInfo[t] = { ticker:t, group:tickerToGroup[t] || "unknown", liq:tickerLiquidity(t), vol:tickerVol(t), score:0, drivers:[] };
       }
       return tickerInfo[t];
     }
@@ -694,17 +622,9 @@
           const lv = 0.55 * info.liq + 0.45 * info.vol;
           const add = base * w * lv;
           info.score += add;
-
           groupContrib[sector] = (groupContrib[sector] || 0) + Math.max(0, add);
-
           if(add > 0.030){
-            info.drivers.push({
-              add,
-              topicKey: h.topicKey,
-              title: h.title,
-              url: h.url,
-              seenDate: h.seenDate
-            });
+            info.drivers.push({ add, topicKey: h.topicKey, title: h.title, url: h.url, seenDate: h.seenDate });
           }
         }
       }
@@ -728,16 +648,13 @@
     return { tickerTable: arr, groupShares };
   }
 
-  // -------------------- Trade plan math (manual price) --------------------
   function computeTradePlan({ ticker, instrumentType, manualPrice, capitalUsd, stockTpPct }){
     const price = Number(manualPrice);
     const cap = Number(capitalUsd);
-
     if(!isFinite(price) || price <= 0) return { ok:false, error:"Enter a valid current price." };
     if(!isFinite(cap) || cap <= 0) return { ok:false, error:"Enter a valid capital amount." };
 
     const isETF = (instrumentType === "ETF");
-
     const pullback = isETF ? 0.003 : 0.007;
     const entry = price * (1 - pullback);
 
@@ -754,7 +671,6 @@
     if(shares < 1) return { ok:false, error:`Capital too small for 1 share at entry ~$${round2(entry)}.` };
 
     const notional = shares * entry;
-
     const feePerOrder = 8;
     const fees = feePerOrder * 2;
     const taxRate = 0.25;
@@ -764,39 +680,43 @@
     const taxTp = Math.max(0, netBeforeTaxTp) * taxRate;
     const netAfterTaxTp = netBeforeTaxTp - taxTp;
 
-    const grossSl = shares * (slStop - entry); // negative
+    const grossSl = shares * (slStop - entry);
     const netAfterTaxSl = grossSl - fees;
 
     return {
-      ok:true,
-      shares,
-      instrumentType,
-      entry: round2(entry),
-      tp: round2(tp),
-      slStop: round2(slStop),
-      slLimit: round2(slLimit),
-      notional: round2(notional),
-      fees: round2(fees),
-      taxRate,
-      tpStats: { gross: round2(grossTp), netBeforeTax: round2(netBeforeTaxTp), tax: round2(taxTp), netAfterTax: round2(netAfterTaxTp) },
+      ok:true, shares, instrumentType,
+      entry: round2(entry), tp: round2(tp),
+      slStop: round2(slStop), slLimit: round2(slLimit),
+      notional: round2(notional), fees: round2(fees), taxRate,
+      tpStats: { gross: round2(grossTp), tax: round2(taxTp), netAfterTax: round2(netAfterTaxTp) },
       slStats: { gross: round2(grossSl), netAfterTax: round2(netAfterTaxSl) },
       timeStop: isETF ? "15–20 trading days" : "10–15 trading days"
     };
   }
 
-  // -------------------- Fetch --------------------
+  function buildFinalQuery(core, opts){
+    let q = core;
+    q += ` sourcelang:${LOCKED_SOURCELANG}`;
+    if(opts.country) q += ` sourcecountry:${opts.country}`;
+    return q.trim();
+  }
+
+  function buildQueryFromTerms(terms, opts){
+    const core = "(" + terms.join(" OR ") + ")";
+    return buildFinalQuery(core, opts);
+  }
+
+  function buildQueryFromCustom(custom, opts){
+    const core = "(" + custom.trim() + ")";
+    return buildFinalQuery(core, opts);
+  }
+
   async function fetchTopic(topic, opts){
     const query = (opts.customQuery && opts.customQuery.trim())
       ? buildQueryFromCustom(opts.customQuery, opts)
       : buildQueryFromTerms(topic.terms, opts);
 
-    const url = buildGdeltUrl({
-      query,
-      timespan: opts.timespan,
-      sort: opts.sort,
-      maxrecords: opts.perTopic
-    });
-
+    const url = buildGdeltUrl({ query, timespan: opts.timespan, sort: opts.sort, maxrecords: opts.maxrecords });
     const resp = await fetch(url);
     const text = await resp.text();
 
@@ -808,7 +728,24 @@
     return { topicKey: topic.key, topicLabel: topic.label, query, url, articles };
   }
 
-  // -------------------- Render --------------------
+  function domainAllowed(articleDomain, allowlist, matchMode){
+    const d = normalizeDomain(articleDomain);
+    if(!d) return false;
+
+    if(matchMode === "exact"){
+      // exact: d must be exactly allowlist entry (or www variant)
+      return allowlist.includes(d) || (d.startsWith("www.") && allowlist.includes(d.slice(4)));
+    }
+
+    // broad: allow if d endsWith allowlist domain (handles subdomains)
+    for(const dom of allowlist){
+      if(d === dom) return true;
+      if(d.endsWith("." + dom)) return true;
+      if(dom.startsWith("www.") && (d === dom.slice(4) || d.endsWith("." + dom.slice(4)))) return true;
+    }
+    return false;
+  }
+
   function setActiveTab(tab){
     document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active", t.dataset.tab === tab));
     el.viewDecision.style.display = tab==="decision" ? "" : "none";
@@ -821,25 +758,17 @@
   function renderMethod(){
     el.viewMethod.innerHTML = `
       <div class="item">
-        <div class="title">What you should expect</div>
+        <div class="title">Why your previous build broke</div>
         <div class="smallnote">
-          If you see repeated picks (e.g., XOP), use the Diagnostics tab: it shows which sector groups dominated the scan's tradability contribution.
-          This app does not “hide” tickers; it explains them.
+          Embedding many domains inside the GDELT query can exceed GDELT's query-length limits.
+          This build avoids that by filtering domains locally after fetching English-only headlines.
         </div>
       </div>
       <div class="item">
-        <div class="title">No results troubleshooting</div>
+        <div class="title">How “trusted only” is enforced</div>
         <div class="smallnote">
-          If all topics return 0: set Domain matching to <b>Broad</b>, increase Lookback (12h → 1day), and avoid overly strict presets.
-          You can also temporarily remove a country filter.
-        </div>
-      </div>
-      <div class="item">
-        <div class="title">Scoring outline</div>
-        <div class="smallnote">
-          Headline impact uses: Clarity + Timing + sector liq/vol averages → score 1..10.
-          Ticker sensitivity aggregates headline trade01 × topic→sector weights × ticker liq/vol blend.
-          Discipline gates decide TRADE vs NO TRADE (Idea Mode bypasses gates).
+          We fetch from GDELT, then discard any article whose domain is not in your allowlist.
+          “Oversample” controls how many we fetch before filtering.
         </div>
       </div>
     `;
@@ -872,14 +801,22 @@
       }).join("");
 
       const err = t.error ? `<div class="item badbox"><div class="title">Error</div><div class="smallnote">${escapeHtml(t.error)}</div></div>` : "";
+      const counts = `
+        <div class="sub" style="margin-top:6px;">
+          <span class="badge"><b>Fetched:</b> ${t.fetchedCount}</span>
+          <span class="badge"><b>Trusted-kept:</b> ${t.trustedKept}</span>
+          <span class="badge"><b>Dropped:</b> ${t.droppedUntrusted}</span>
+        </div>
+      `;
 
       return `
         <div class="item">
           <div class="title">${escapeHtml(t.topicLabel)} <span class="badge">top ${t.items.length}</span></div>
           <div class="smallnote">Query: <span class="mono">${escapeHtml(t.query)}</span></div>
           <div class="smallnote">GDELT: <a href="${escapeHtml(t.url)}" target="_blank" rel="noopener noreferrer">open results</a></div>
+          ${counts}
           ${err}
-          <div style="margin-top:10px;" class="results">${items || `<div class="item warnbox">No results for this topic.</div>`}</div>
+          <div style="margin-top:10px;" class="results">${items || `<div class="item warnbox">No trusted results for this topic.</div>`}</div>
         </div>
       `;
     }).join("");
@@ -917,8 +854,8 @@
       <div class="item warnbox">
         <div class="title">Sector dominance</div>
         <div class="smallnote">
-          Top contributing groups this scan: <b>${escapeHtml(top3.map(x => `${x.group} (${Math.round(x.share*100)}%)`).join(", "))}</b>.
-          Repeated picks from a dominant group (e.g., Energy → XOP) can be a legitimate consequence of the headline mix.
+          Top contributing groups: <b>${escapeHtml(top3.map(x => `${x.group} (${Math.round(x.share*100)}%)`).join(", "))}</b>.
+          If Energy dominates, XOP/XLE-style picks repeating can be legitimate.
         </div>
       </div>
     ` : "";
@@ -937,7 +874,16 @@
       `;
     }).join("");
 
-    el.viewDiagnostics.innerHTML = note + (bars || `<div class="item">No diagnostics available.</div>`);
+    const filterStats = `
+      <div class="item">
+        <div class="title">Trusted filter stats</div>
+        <div class="smallnote">
+          Raw fetched: <b>${scan.rawFetched}</b> • Trusted kept: <b>${scan.trustedKeptTotal}</b> • Dropped untrusted: <b>${scan.droppedUntrustedTotal}</b>
+        </div>
+      </div>
+    `;
+
+    el.viewDiagnostics.innerHTML = note + filterStats + (bars || `<div class="item">No diagnostics available.</div>`);
   }
 
   function renderDecision(scan){
@@ -952,25 +898,21 @@
 
     const reasons = dec.reasons.map(r => `<div class="smallnote">• ${escapeHtml(r)}</div>`).join("");
 
-    const kpi = `
-      <div class="kpi">
-        <div class="box"><b>raw headlines</b><span>${scan.countHeadlines}</span></div>
-        <div class="box"><b>kept (catalysts)</b><span>${dec.kept.length} (min ${RUNTIME.minKept})</span></div>
-        <div class="box"><b>strong catalysts</b><span>${dec.strong.length} (cut score≥${RUNTIME.strongScoreCut}, clarity≥${RUNTIME.strongClarityCut})</span></div>
-        <div class="box"><b>avgTopK</b><span>${round2(dec.avgTopK)} (min ${round2(RUNTIME.minAvgTrade01)})</span></div>
-      </div>
-    `;
-
     const header = `
       <div class="item ${dec.decision==="TRADE" ? "okbox" : (dec.decision==="IDEA MODE" ? "warnbox" : "badbox")}">
         <div class="title">Decision ${decisionBadge}</div>
         <div class="sub">
           <span class="badge"><b>Strictness:</b> ${Math.round(RUNTIME.strictness*100)}%</span>
-          <span class="badge"><b>Domain matching:</b> ${escapeHtml(scan.opts.domainMatch)}</span>
-          <span class="badge"><b>Preset:</b> ${escapeHtml(scan.opts.domainPreset)}</span>
+          <span class="badge"><b>Oversample:</b> x${escapeHtml(scan.opts.oversample)}</span>
+          <span class="badge"><b>Trusted domains:</b> ${scan.opts.trustedDomains.length}</span>
           <span class="badge"><b>Version:</b> ${escapeHtml(VERSION)}</span>
         </div>
-        ${kpi}
+        <div class="kpi">
+          <div class="box"><b>trusted headlines</b><span>${scan.countHeadlines}</span></div>
+          <div class="box"><b>kept (catalysts)</b><span>${dec.kept.length} (min ${RUNTIME.minKept})</span></div>
+          <div class="box"><b>strong catalysts</b><span>${dec.strong.length}</span></div>
+          <div class="box"><b>avgTopK</b><span>${round2(dec.avgTopK)} (min ${round2(RUNTIME.minAvgTrade01)})</span></div>
+        </div>
         <div class="hr"></div>
         ${reasons}
       </div>
@@ -980,7 +922,6 @@
 
     const picksBlock = picks.length ? picks.map((p, idx) => {
       const itype = getInstrumentType(p.ticker);
-
       const drivers = (p.drivers || []).map(d => {
         const when = d.seenDate ? fmtDate(new Date(d.seenDate), tz) : "";
         return `
@@ -1028,13 +969,12 @@
     }).join("") : `
       <div class="item warnbox">
         <div class="title">No picks</div>
-        <div class="smallnote">No candidates were scored. This usually means 0 headlines were fetched.</div>
+        <div class="smallnote">No candidates were scored. This usually means 0 trusted headlines were kept.</div>
       </div>
     `;
 
     el.viewDecision.innerHTML = header + picksBlock;
 
-    // Attach plan calculators
     picks.forEach((p, idx) => {
       const priceId = `price_${p.ticker}_${idx}`;
       const outId = `plan_${p.ticker}_${idx}`;
@@ -1049,13 +989,7 @@
         const cap = Number(el.capital.value || 1500);
         const stockTp = Number(el.stockTp.value || 22);
 
-        const plan = computeTradePlan({
-          ticker: p.ticker,
-          instrumentType,
-          manualPrice: price,
-          capitalUsd: cap,
-          stockTpPct: stockTp
-        });
+        const plan = computeTradePlan({ ticker: p.ticker, instrumentType, manualPrice: price, capitalUsd: cap, stockTpPct: stockTp });
 
         if(!plan.ok){
           outEl.className = "smallnote warnbox";
@@ -1068,8 +1002,6 @@
 
         const isETF = (instrumentType === "ETF");
         const entryStyle = isETF ? "Entry pullback: -0.3%" : "Entry pullback: -0.7%";
-        const tpRule = isETF ? "TP: +15%" : `TP: +${Math.round((plan.tp/plan.entry - 1)*100)}% (stock setting)`;
-        const slRule = isETF ? "SL: -8%" : "SL: -10%";
 
         outEl.className = "smallnote okbox";
         outEl.style.marginTop = "10px";
@@ -1084,17 +1016,17 @@
             <span class="badge"><b>Tax:</b> 25% gains</span>
           </div>
           <div class="smallnote" style="margin-top:8px;">
-            <b>${entryStyle}</b> | ${tpRule} | ${slRule}
+            <b>${entryStyle}</b> | TP ${(instrumentType==="ETF")?"+15%":("+"+Math.round((plan.tp/plan.entry-1)*100)+"%")} | SL ${(instrumentType==="ETF")?"-8%":"-10%"}
           </div>
           <div class="smallnote" style="margin-top:8px;">
             BUY LIMIT ${escapeHtml(p.ticker)}: <b>$${plan.entry}</b><br/>
             OCO exits:<br/>
             • Take-Profit LIMIT: <b>$${plan.tp}</b><br/>
             • Stop-Loss STOP-LIMIT: stop <b>$${plan.slStop}</b>, limit <b>$${plan.slLimit}</b><br/>
-            Time stop: <b>${plan.timeStop}</b> (exit if TP/SL not hit).
+            Time stop: <b>${plan.timeStop}</b>.
           </div>
           <div class="smallnote" style="margin-top:8px;">
-            TP scenario (net): gross $${plan.tpStats.gross}, fees $${plan.fees}, tax $${plan.tpStats.tax} → <b>$${plan.tpStats.netAfterTax}</b><br/>
+            TP scenario (net): gross $${plan.tpStats.gross}, tax $${plan.tpStats.tax}, fees $${plan.fees} → <b>$${plan.tpStats.netAfterTax}</b><br/>
             SL scenario (net): gross $${plan.slStats.gross}, fees $${plan.fees} → <b>$${plan.slStats.netAfterTax}</b>
           </div>
         `;
@@ -1105,7 +1037,7 @@
   }
 
   function renderAll(scan){
-    el.meta.textContent = `Scan @ ${fmtDate(new Date(scan.createdAt), scan.opts.tz)} | headlines: ${scan.countHeadlines} | decision: ${scan.decisionMetrics.decision}`;
+    el.meta.textContent = `Scan @ ${fmtDate(new Date(scan.createdAt), scan.opts.tz)} | trusted headlines: ${scan.countHeadlines} | decision: ${scan.decisionMetrics.decision}`;
     renderDecision(scan);
     renderHeadlines(scan);
     renderTickers(scan);
@@ -1113,11 +1045,11 @@
     renderMethod();
   }
 
-  // -------------------- Storage: history + domains --------------------
-  const STORAGE_KEY = "trade_scanner_history_v7";
-  const DOMAINS_KEY = "trade_scanner_trusted_domains_v2";
-  const PRESET_KEY = "trade_scanner_domain_preset_v1";
-  const MATCH_KEY = "trade_scanner_domain_match_v1";
+  const STORAGE_KEY = "trade_scanner_history_v8";
+  const DOMAINS_KEY = "trade_scanner_trusted_domains_v3";
+  const PRESET_KEY = "trade_scanner_domain_preset_v2";
+  const MATCH_KEY = "trade_scanner_domain_match_v2";
+  const OVER_KEY = "trade_scanner_oversample_v1";
 
   function loadHistory(){
     try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
@@ -1186,9 +1118,7 @@
     el.exportBtn.disabled = false;
   }
 
-  function loadDomainsFallback(){
-    return PRESET_EXPANDED.slice();
-  }
+  function loadDomainsFallback(){ return PRESET_EXPANDED.slice(); }
 
   function loadDomains(){
     const raw = localStorage.getItem(DOMAINS_KEY);
@@ -1201,9 +1131,7 @@
     }
   }
 
-  function saveDomains(domains){
-    localStorage.setItem(DOMAINS_KEY, JSON.stringify(domains));
-  }
+  function saveDomains(domains){ localStorage.setItem(DOMAINS_KEY, JSON.stringify(domains)); }
 
   function applyPresetToTextarea(preset){
     const domains = getPresetDomains(preset);
@@ -1221,7 +1149,6 @@
     setStatus(`Saved trusted domains (${domains.length}).`);
   }
 
-  // -------------------- Main run --------------------
   async function runScan(){
     applyStrictnessFromUI();
     setStatus("");
@@ -1230,39 +1157,46 @@
     el.saveBtn.disabled = true;
     el.exportBtn.disabled = true;
 
-    const nowUtc = new Date();
-
-    const trustedDomains = parseDomains(el.trustedDomains.value);
-    if(trustedDomains.length < 5){
+    const allowlist = parseDomains(el.trustedDomains.value);
+    if(allowlist.length < 5){
       setStatus("Trusted domains list is empty/too small. Reset to a preset and try again.", true);
       el.runBtn.disabled = false;
       return;
     }
 
+    const perTopic = Math.max(1, Math.min(25, Number(el.perTopic.value || 5)));
+    const oversample = Math.max(2, Math.min(10, Number(el.oversample.value || 6)));
+    const maxrecords = Math.max(perTopic, Math.min(250, perTopic * oversample)); // keep under a sane cap
+
     const opts = {
       timespan: el.timespan.value,
       sort: el.sort.value,
-      perTopic: Math.max(1, Math.min(25, Number(el.perTopic.value || 5))),
+      perTopic,
       concurrency: Math.max(1, Math.min(10, Number(el.concurrency.value || 4))),
       tz: el.tz.value || "Asia/Jerusalem",
       country: (el.country.value || "").trim(),
       customQuery: el.customQuery.value || "",
-      trustedDomains,
+      trustedDomains: allowlist,
       domainPreset: el.domainPreset.value,
-      domainMatch: el.domainMatch.value
+      domainMatch: el.domainMatch.value,
+      oversample,
+      maxrecords
     };
 
     setPills([
       ["timespan", opts.timespan],
       ["sort", opts.sort || "relevance"],
-      ["perTopic", opts.perTopic],
-      ["concurrency", opts.concurrency],
+      ["perTopic", perTopic],
+      ["oversample", "x"+oversample],
+      ["maxrecords", maxrecords],
       ["lang", "english (locked)"],
-      ["domains", trustedDomains.length],
+      ["domains", allowlist.length],
       ["match", opts.domainMatch]
     ]);
 
-    setStatus("Fetching trusted English headlines from GDELT…");
+    setStatus("Fetching GDELT (English-only), then filtering to trusted domains…");
+
+    const nowUtc = new Date();
 
     let byTopic;
     try{
@@ -1280,28 +1214,36 @@
       return;
     }
 
-    // Score headlines
+    let rawFetched = 0;
+    let trustedKeptTotal = 0;
+    let droppedUntrustedTotal = 0;
+
     const all = [];
     const scoredByTopic = byTopic.map(t => {
-      const items = (t.articles || []).map(a => {
+      const fetched = (t.articles || []).length;
+      rawFetched += fetched;
+
+      const trusted = (t.articles || []).filter(a => domainAllowed(a.domain || "", allowlist, opts.domainMatch));
+      const dropped = fetched - trusted.length;
+      trustedKeptTotal += trusted.length;
+      droppedUntrustedTotal += dropped;
+
+      const trimmed = trusted.slice(0, perTopic);
+
+      const items = trimmed.map(a => {
         const title = a.title || "(no title)";
         const url = a.url || a.url_mobile || "#";
         const domain = a.domain || "";
         const seenDateObj = parseGdeltSeenDate(a.seendate || a.seenDate || "");
 
-        const { score10, trade01, clarity, timing } = headlineImpactScore({
-          topicKey: t.topicKey, title, seenDate: seenDateObj
-        }, nowUtc);
-
+        const { score10, trade01, clarity, timing } = headlineImpactScore({ topicKey: t.topicKey, title, seenDate: seenDateObj }, nowUtc);
         const soft = isSoftHeadline(title);
 
         const h = {
-          topicKey: t.topicKey,
-          topicLabel: t.topicLabel,
+          topicKey: t.topicKey, topicLabel: t.topicLabel,
           title, url, domain,
           seenDate: seenDateObj ? seenDateObj.toISOString() : null,
-          score10, trade01, clarity, timing,
-          soft
+          score10, trade01, clarity, timing, soft
         };
         all.push(h);
         return h;
@@ -1313,6 +1255,9 @@
         query: t.query,
         url: t.url,
         error: t.error,
+        fetchedCount: fetched,
+        trustedKept: trusted.length,
+        droppedUntrusted: dropped,
         items
       };
     });
@@ -1326,6 +1271,9 @@
     const scan = {
       createdAt: nowUtc.toISOString(),
       opts,
+      rawFetched,
+      trustedKeptTotal,
+      droppedUntrustedTotal,
       byTopic: scoredByTopic,
       countHeadlines: all.length,
       decisionMetrics,
@@ -1338,7 +1286,7 @@
 
     const errCount = scoredByTopic.filter(x=>x.error).length;
     if(all.length === 0){
-      setStatus("No headlines returned. Try Broad domain matching and/or longer lookback.", true);
+      setStatus("0 trusted headlines kept. Increase lookback, oversample, or broaden domain matching.", true);
     } else if(errCount){
       setStatus(`Completed with ${errCount} topic errors (see Headlines tab).`, true);
     } else {
@@ -1351,13 +1299,11 @@
     el.exportBtn.disabled = false;
   }
 
-  // -------------------- Events --------------------
   document.querySelectorAll(".tab").forEach(t=>{
     t.addEventListener("click", () => setActiveTab(t.dataset.tab));
   });
 
   el.strictness.addEventListener("input", applyStrictnessFromUI);
-
   el.runBtn.addEventListener("click", runScan);
   el.saveBtn.addEventListener("click", saveCurrent);
   el.exportBtn.addEventListener("click", exportJson);
@@ -1372,7 +1318,6 @@
   el.resetDomainsBtn.addEventListener("click", () => {
     const preset = el.domainPreset.value;
     if(preset === "custom"){
-      // If custom: reset to expanded (safe default)
       el.domainPreset.value = "expanded";
       localStorage.setItem(PRESET_KEY, "expanded");
       applyPresetToTextarea("expanded");
@@ -1395,32 +1340,36 @@
     }
   });
 
-  el.domainMatch.addEventListener("change", () => {
-    localStorage.setItem(MATCH_KEY, el.domainMatch.value);
-  });
+  el.domainMatch.addEventListener("change", () => localStorage.setItem(MATCH_KEY, el.domainMatch.value));
+  el.oversample.addEventListener("change", () => localStorage.setItem(OVER_KEY, el.oversample.value));
 
-  // -------------------- Init --------------------
-  refreshHistoryDropdown();
-  applyStrictnessFromUI();
-  setActiveTab("decision");
-  renderMethod();
+  function init(){
+    refreshHistoryDropdown();
+    applyStrictnessFromUI();
+    setActiveTab("decision");
+    renderMethod();
 
-  // Load remembered preset/match
-  const savedPreset = localStorage.getItem(PRESET_KEY);
-  if(savedPreset && ["expanded","core","official","custom"].includes(savedPreset)){
-    el.domainPreset.value = savedPreset;
-  }
-  const savedMatch = localStorage.getItem(MATCH_KEY);
-  if(savedMatch && ["broad","exact"].includes(savedMatch)){
-    el.domainMatch.value = savedMatch;
+    const savedPreset = localStorage.getItem(PRESET_KEY);
+    if(savedPreset && ["expanded","core","official","custom"].includes(savedPreset)){
+      el.domainPreset.value = savedPreset;
+    }
+    const savedMatch = localStorage.getItem(MATCH_KEY);
+    if(savedMatch && ["broad","exact"].includes(savedMatch)){
+      el.domainMatch.value = savedMatch;
+    }
+    const savedOver = localStorage.getItem(OVER_KEY);
+    if(savedOver && ["4","6","8","10"].includes(savedOver)){
+      el.oversample.value = savedOver;
+    }
+
+    if(el.domainPreset.value !== "custom"){
+      applyPresetToTextarea(el.domainPreset.value);
+    } else {
+      el.trustedDomains.value = loadDomains().join("\n");
+    }
   }
 
-  // Load domains: if preset is not custom, ensure textarea matches preset; otherwise load stored list
-  if(el.domainPreset.value !== "custom"){
-    applyPresetToTextarea(el.domainPreset.value);
-  } else {
-    el.trustedDomains.value = loadDomains().join("\n");
-  }
+  init();
 })();
 </script>
 </body>
