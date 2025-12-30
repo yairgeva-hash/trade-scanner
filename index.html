@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Speculative Trade Advisor (Free, GDELT)</title>
+  <title>Event-Driven Trade Advisor (Trusted English GDELT)</title>
   <style>
     :root{
       --bg:#0b0f17; --panel:#0e162a; --panel2:#0b1020;
       --border:#1d2a44; --border2:#233357;
       --text:#e8eefc; --muted:rgba(232,238,252,.72);
-      --accent:#2a5cff; --bad:#ff8080; --ok:#93ffb4; --warn:#ffd480;
+      --accent:#2a5cff; --bad:#ff8080; --ok:#93ffb4; --warn:#ffd27a;
       font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
     }
     body{margin:0;background:var(--bg);color:var(--text);}
@@ -18,7 +18,7 @@
     header p{margin:0;color:var(--muted);font-size:13px;line-height:1.35;}
     main{padding:16px 18px;max-width:1200px;margin:0 auto;}
     .grid{display:grid;grid-template-columns:1fr;gap:12px;}
-    @media(min-width:980px){.grid{grid-template-columns:420px 1fr;}}
+    @media(min-width:980px){.grid{grid-template-columns:440px 1fr;}}
     .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px;}
     label{display:block;font-size:12px;color:var(--muted);margin:10px 0 6px;}
     input,select,textarea,button{
@@ -29,7 +29,7 @@
     .row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
     .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
     .actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;}
-    button{cursor:pointer;font-weight:700;}
+    button{cursor:pointer;font-weight:800;}
     button.primary{background:var(--accent);border-color:var(--accent);}
     button.ghost{background:transparent;}
     button:disabled{opacity:.65;cursor:not-allowed;}
@@ -39,16 +39,16 @@
     .pill{border:1px solid var(--border2);background:var(--panel2);padding:5px 9px;border-radius:999px;font-size:12px;color:var(--muted);}
     .rightHead{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:10px;}
     .rightHead h2{margin:0;font-size:16px;}
-    .rightHead .small{font-size:12px;color:var(--muted);}
+    .rightHead .small{font-size:12px;color:var(--muted);text-align:right;}
     .tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px;}
     .tab{padding:8px 10px;border-radius:999px;border:1px solid var(--border2);background:var(--panel2);font-size:12px;color:var(--muted);cursor:pointer;user-select:none;}
     .tab.active{border-color:var(--accent);color:var(--text);}
     .results{display:grid;gap:10px;}
     .item{border-radius:14px;border:1px solid var(--border);background:var(--panel2);padding:12px;}
-    .item .title{margin:0 0 6px;font-weight:800;line-height:1.25;}
+    .item .title{margin:0 0 6px;font-weight:900;line-height:1.25;}
     .item a{color:#9dc0ff;text-decoration:none;}
     .item a:hover{text-decoration:underline;}
-    .sub{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted);}
+    .sub{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted);align-items:center;}
     .scoreline{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:12px;color:var(--muted);}
     .badge{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border2);background:#0b1020;padding:4px 8px;border-radius:999px;}
     .dot{width:8px;height:8px;border-radius:999px;background:var(--muted);display:inline-block;}
@@ -58,27 +58,25 @@
     .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;}
     .smallnote{font-size:12px;color:var(--muted);line-height:1.35;margin-top:10px;}
     .hr{height:1px;background:var(--border);margin:10px 0;}
-    .rangeWrap{display:grid;grid-template-columns:1fr 90px;gap:10px;align-items:center;}
-    .miniGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;}
-    .miniGrid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px;}
-    .kpi{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;}
-    .muted{color:var(--muted);}
-    .planBox{margin-top:10px;border:1px solid var(--border2);background:#081022;border-radius:14px;padding:10px;}
-    .planBox h3{margin:0 0 6px;font-size:13px;}
-    .planLine{display:flex;flex-wrap:wrap;gap:8px;font-size:12px;color:var(--muted);margin-top:6px;}
-    .planLine b{color:var(--text);font-weight:800;}
-    .warnText{color:var(--warn);}
-    .badText{color:var(--bad);}
+    .tight{margin-top:6px;}
+    .kpi{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;}
+    .kpi .box{border:1px solid var(--border);background:#0b1020;border-radius:12px;padding:10px;}
+    .kpi .box b{display:block;font-size:12px;margin-bottom:3px;}
+    .kpi .box span{color:var(--muted);font-size:12px;}
+    .bar{height:10px;border-radius:999px;background:#0b1020;border:1px solid var(--border2);overflow:hidden;}
+    .bar > div{height:100%;background:var(--accent);width:0%;}
+    .warnbox{border:1px solid rgba(255,210,122,.35);background:rgba(255,210,122,.07);}
+    .okbox{border:1px solid rgba(147,255,180,.35);background:rgba(147,255,180,.07);}
+    .badbox{border:1px solid rgba(255,128,128,.35);background:rgba(255,128,128,.07);}
   </style>
 </head>
 
 <body>
 <header>
-  <h1>Speculative Trade Advisor (Free, GDELT)</h1>
+  <h1>Event-Driven Trade Advisor <span class="badge"><span class="dot ok"></span>v6 Trusted English</span></h1>
   <p>
-    Free-only, deterministic scanner: fetches English headlines (GDELT DOC 2.0), filters for tradable catalysts, scores tradeability (1–10),
-    ranks 3 candidates for a ~15–20 trading day event window, and prints a disciplined trade plan with fees/tax math (manual price input).
-    Research tool only — not investment advice.
+    Pulls the latest headlines from GDELT DOC 2.0 (English-only + trusted-domain allowlist), scores tradability, and produces a compliant trade plan
+    using manual entry price (no paid market-data required). Research tool only, not investment advice.
   </p>
 </header>
 
@@ -128,21 +126,32 @@
       </div>
     </div>
 
-    <label>Strictness / Sensitivity</label>
-    <div class="rangeWrap">
-      <input id="strictness" type="range" min="0" max="100" value="70" />
-      <input id="strictnessNum" type="number" min="0" max="100" value="70" />
+    <label>Strictness (0 = Idea Mode, 100 = Strict)</label>
+    <input id="strictness" type="range" min="0" max="100" value="70" />
+    <div class="sub tight">
+      <span class="badge"><span class="dot warn"></span><b>Mode:</b> <span id="modeLabel">Strict</span></span>
+      <span class="badge"><b>English:</b> <span class="mono">sourcelang:english</span> (locked)</span>
     </div>
-    <div class="smallnote" id="strictnessHint"></div>
-
-    <label>Source language (locked)</label>
-    <input id="langLocked" value="english" disabled />
 
     <label>Optional filter (applied to all topics)</label>
     <input id="country" placeholder="sourcecountry (e.g. unitedstates)" />
 
+    <label>Trusted domains allowlist (ENFORCED)</label>
+    <textarea id="trustedDomains"></textarea>
+    <div class="row">
+      <button id="resetDomainsBtn" class="ghost">Reset Trusted List</button>
+      <button id="saveDomainsBtn" class="ghost">Save List</button>
+    </div>
+    <div class="smallnote">
+      Only articles whose domain matches this allowlist are fetched. This increases signal quality but can reduce coverage.
+      If you get frequent NO TRADE, increase lookback (e.g., 12h → 1day).
+    </div>
+
     <label>Optional: custom topic query override (advanced)</label>
-    <textarea id="customQuery" placeholder='Leave blank. Example: ("sanctions" OR "export controls")'></textarea>
+    <textarea id="customQuery" placeholder='Leave blank. Example: ("export controls" OR sanctions)'></textarea>
+    <div class="smallnote">
+      Even with a custom query, the app will still enforce: <span class="mono">sourcelang:english</span> AND trusted-domain allowlist.
+    </div>
 
     <div class="actions">
       <button id="runBtn" class="primary">Run Scan</button>
@@ -157,16 +166,29 @@
     <div id="status" class="status"></div>
     <div id="pills" class="pillbar"></div>
 
+    <div class="hr"></div>
+
+    <label>Trade plan inputs (manual)</label>
+    <div class="row">
+      <div>
+        <label>Capital per trade (USD)</label>
+        <input id="capital" type="number" min="1000" max="2000" value="1500" />
+      </div>
+      <div>
+        <label>Stock TP % (20–25)</label>
+        <input id="stockTp" type="number" min="20" max="25" value="22" />
+      </div>
+    </div>
+
     <div class="smallnote">
-      Discipline layer assumes: $1,000–$2,000 per trade, one active trade at a time, LIMIT entry,
-      OCO exits (TP/SL), and time-stop exits. You manually input the current price per ticker to compute the plan.
+      Fees: $8 per executed order. Tax: 25% on net gains. One active trade at a time (policy), not enforced by code.
     </div>
 
     <div class="hr"></div>
 
     <label>History (localStorage)</label>
     <select id="history"></select>
-    <div class="smallnote">Select a past scan to re-load results without re-fetching news.</div>
+    <div class="smallnote">Select a past scan to re-load its results without re-fetching news.</div>
   </section>
 
   <!-- RIGHT: Results -->
@@ -177,15 +199,17 @@
     </div>
 
     <div class="tabs">
-      <div class="tab active" data-tab="picks">Top 3 Picks</div>
+      <div class="tab active" data-tab="decision">Trade Decision</div>
       <div class="tab" data-tab="headlines">Headlines by Topic</div>
       <div class="tab" data-tab="tickers">Ticker Table</div>
-      <div class="tab" data-tab="method">Method</div>
+      <div class="tab" data-tab="diagnostics">Diagnostics</div>
+      <div class="tab" data-tab="method">Scoring Method</div>
     </div>
 
-    <div id="viewPicks" class="results"></div>
+    <div id="viewDecision" class="results"></div>
     <div id="viewHeadlines" class="results" style="display:none;"></div>
     <div id="viewTickers" class="results" style="display:none;"></div>
+    <div id="viewDiagnostics" class="results" style="display:none;"></div>
     <div id="viewMethod" class="results" style="display:none;"></div>
   </section>
 </main>
@@ -193,22 +217,19 @@
 <script>
 (() => {
   // ---------- Constants ----------
+  const VERSION = "v6-trusted-english-discipline";
   const GDELT_ENDPOINT = "https://api.gdeltproject.org/api/v2/doc/doc";
+  const LOCKED_SOURCELANG = "english";
 
-  // Trading discipline constants (Israel)
-  const FEES_PER_EXECUTED_ORDER_USD = 8;
-  const CAPITAL_GAINS_TAX = 0.25;
+  // Trusted domains (editable, but always enforced)
+  const TRUSTED_DOMAINS_DEFAULT = [
+    "reuters.com","apnews.com","bloomberg.com","ft.com","wsj.com","economist.com",
+    "bbc.co.uk","theguardian.com","nytimes.com","washingtonpost.com","cnbc.com",
+    "federalreserve.gov","ecb.europa.eu","bankofengland.co.uk","bls.gov","bea.gov",
+    "opec.org","usgs.gov","noaa.gov"
+  ];
 
-  // Timeboxes (trading days)
-  const ETF_TIMEBOX_TD = 18;     // within 15–20
-  const STOCK_TIMEBOX_TD = 12;   // within 10–15
-  const REVIEW1_TD = 6;          // day 5–7
-  const REVIEW2_FRACTION = 2/3;  // ~day 10 / 2/3 timebox
-
-  // Entry pullback (from user suggestion)
-  const ETF_PULLBACK = 0.003;   // -0.3%
-  const STOCK_PULLBACK = 0.007; // -0.7%
-
+  // User-provided universe
   const TICKER_GROUPS = {
     defense: ["PPA","ITA","LMT","NOC","GD","RTX","BA","HII","LHX","TDG","AVAV","KTOS"],
     cyber: ["CIBR","HACK","PANW","CRWD","FTNT","ZS","OKTA","NET"],
@@ -221,57 +242,50 @@
     gold: ["GLD","IAU","GDX"]
   };
 
+  // ETF set (for rule differences: pullback, TP/SL, time stop)
   const ETF_SET = new Set([
-    "PPA","ITA","CIBR","HACK","SMH","SOXX",
-    "XLE","XOP","OIH","KIE","URNM","URA",
-    "PHO","MOO","DBA","GLD","IAU","GDX"
+    "PPA","ITA","CIBR","HACK","SMH","SOXX","XLE","XOP","OIH","KIE","URNM","URA","PHO","MOO","DBA","GLD","IAU","GDX"
   ]);
 
+  // Topics requested (bundled)
   const TOPICS = [
     { key:"geopolitics", label:"geopolitics", terms:['geopolitics','"regional tensions"','"border clash"','"military buildup"','"diplomatic crisis"'] },
     { key:"sanctions", label:"sanctions", terms:['sanctions','"export controls"','"blacklist"','"secondary sanctions"','"asset freeze"'] },
-    { key:"ceasefire", label:"ceasefire", terms:['ceasefire','"truce"','"peace talks"','"temporary halt"'] },
-    { key:"war", label:"war", terms:['war','"airstrike"','"missile attack"','"ground offensive"','"troop deployment"'] },
-    { key:"regulation", label:"regulation", terms:['regulation','"regulatory crackdown"','"antitrust"','"compliance rule"','"SEC"','"FTC"'] },
+    { key:"ceasefire", label:"ceasefire", terms:['ceasefire','truce','"peace talks"','"temporary halt"'] },
+    { key:"war", label:"war", terms:['war','airstrike','"missile attack"','"ground offensive"','"troop deployment"'] },
+    { key:"regulation", label:"regulation", terms:['regulation','"regulatory crackdown"','antitrust','"compliance rule"','SEC','FTC'] },
     { key:"tariff", label:"tariff", terms:['tariff','"trade war"','"import duty"','"export ban"'] },
-    { key:"cyber", label:"cyber", terms:['cyber','"ransomware"','"data breach"','"DDoS"','"zero-day"','"hackers"'] },
-    { key:"earthquake", label:"earthquake", terms:['earthquake','"seismic"','"aftershock"','"magnitude"'] },
+    { key:"cyber", label:"cyber", terms:['cyber','ransomware','"data breach"','DDoS','"zero-day"','hackers'] },
+    { key:"earthquake", label:"earthquake", terms:['earthquake','seismic','aftershock','magnitude'] },
     { key:"flood", label:"flood", terms:['flood','"flash flood"','"storm surge"','"river overflow"'] },
-    { key:"wildfire", label:"wildfire", terms:['wildfire','"forest fire"','"evacuation order"','"burning"'] },
-    { key:"inflation", label:"inflation", terms:['inflation','"CPI"','"PCE"','"price pressures"','"core inflation"'] },
+    { key:"wildfire", label:"wildfire", terms:['wildfire','"forest fire"','"evacuation order"','burning'] },
+    { key:"inflation", label:"inflation", terms:['inflation','CPI','PCE','"price pressures"','"core inflation"'] },
     { key:"rates", label:"rates", terms:['"interest rate"','"rate hike"','"rate cut"','"policy rate"','"Federal Reserve"','ECB','BoE'] },
     { key:"recession", label:"recession", terms:['recession','"GDP contraction"','"yield curve"','"job losses"','"hard landing"'] },
-    { key:"OPEC", label:"OPEC", terms:['OPEC','"OPEC+"','"oil output"','"production cut"','"quota"'] },
+    { key:"OPEC", label:"OPEC", terms:['OPEC','"OPEC+"','"oil output"','"production cut"','quota'] },
     { key:"oil", label:"oil", terms:['"crude oil"','Brent','WTI','"oil prices"','"oil supply"'] }
   ];
 
-  // Signed sector effects: + likely winners, - likely losers.
+  // Topic -> sector weights (0..1). Directional “beneficiary bias” for long-only.
   const TOPIC_SECTOR_WEIGHTS = {
-    geopolitics: { defense:+0.80, energy:+0.55, shipping:+0.20, gold:+0.40, insurers:-0.10, semis:-0.05, cyber:+0.10 },
-    sanctions:   { energy:+0.30, shipping:+0.20, defense:+0.20, semis:-0.25, gold:+0.25 },
-    ceasefire:   { defense:-0.45, energy:-0.20, shipping:+0.35, gold:-0.25, insurers:+0.10 },
-    war:         { defense:+0.95, energy:+0.55, gold:+0.65, shipping:+0.10, insurers:-0.20, cyber:+0.10 },
-
-    regulation:  { insurers:+0.20, semis:-0.10, energy:-0.05, cyber:+0.05 },
-    tariff:      { semis:-0.25, shipping:-0.10, energy:+0.05, gold:+0.05 },
-
-    cyber:       { cyber:+0.95, defense:+0.05 },
-
-    earthquake:  { insurers:-0.35, water_agri:+0.20, energy:-0.05 },
-    flood:       { insurers:-0.30, water_agri:+0.25, energy:-0.05 },
-    wildfire:    { insurers:-0.25, water_agri:+0.25, energy:+0.05 },
-
-    inflation:   { gold:+0.35, energy:+0.20, insurers:+0.05, semis:-0.05 },
-
-    rates_cut:   { semis:+0.20, energy:+0.05, shipping:+0.05, gold:-0.15, insurers:-0.05 },
-    rates_hike:  { insurers:+0.20, gold:-0.10, semis:-0.15, energy:-0.05 },
-
-    recession:   { gold:+0.45, insurers:-0.15, semis:-0.20, energy:-0.15 },
-
-    OPEC:        { energy:+0.85, shipping:+0.15, gold:+0.05 },
-    oil:         { energy:+0.75, shipping:+0.10, gold:+0.05 }
+    geopolitics: { defense:0.8, energy:0.6, shipping:0.5, gold:0.6, insurers:0.2 },
+    sanctions:   { energy:0.5, shipping:0.5, defense:0.4, semis:0.25, gold:0.3 },
+    ceasefire:   { shipping:0.6, energy:0.25, gold:0.15, defense:0.15 },
+    war:         { defense:0.9, energy:0.6, gold:0.7, shipping:0.4 },
+    regulation:  { insurers:0.35, semis:0.25, energy:0.2 },
+    tariff:      { semis:0.45, shipping:0.35, energy:0.2 },
+    cyber:       { cyber:0.95 },
+    earthquake:  { insurers:0.25, water_agri:0.25, energy:0.15 },
+    flood:       { insurers:0.25, water_agri:0.35, energy:0.15 },
+    wildfire:    { insurers:0.25, water_agri:0.35, energy:0.15 },
+    inflation:   { gold:0.35, insurers:0.25, energy:0.2 },
+    rates:       { insurers:0.35, gold:0.25 },
+    recession:   { gold:0.45, insurers:0.25 },
+    OPEC:        { energy:0.9, shipping:0.35 },
+    oil:         { energy:0.85, shipping:0.3 }
   };
 
+  // Heuristic Liquidity scores (0..1). Edit freely.
   const LIQ = Object.fromEntries([
     ["PPA",0.75],["ITA",0.8],["CIBR",0.8],["HACK",0.7],["SMH",0.85],["SOXX",0.85],
     ["XLE",0.9],["XOP",0.75],["OIH",0.6],["KIE",0.65],["URNM",0.55],["URA",0.65],
@@ -282,6 +296,7 @@
     ["ZIM",0.6],["DAC",0.45],["UEC",0.45],["LEU",0.45]
   ]);
 
+  // Heuristic Volatility scores (0..1). Edit freely.
   const VOL = Object.fromEntries([
     ["NVDA",0.9],["AMD",0.85],["ARM",0.85],["MRVL",0.8],["MU",0.85],
     ["XOP",0.8],["OIH",0.85],["HAL",0.75],["SLB",0.7],
@@ -295,6 +310,17 @@
   const DEFAULT_LIQ = 0.55;
   const DEFAULT_VOL = 0.55;
 
+  // Runtime gate settings (derived from strictness)
+  const RUNTIME = {
+    strictness: 0.70,      // 0..1
+    ideaMode: false,
+    minAvgTrade01: 0.40,   // 0..1
+    minKept: 8,
+    strongScoreCut: 6,
+    strongClarityCut: 0.45,
+    requireStrong: true
+  };
+
   // ---------- UI ----------
   const el = {
     timespan: document.getElementById("timespan"),
@@ -303,10 +329,14 @@
     concurrency: document.getElementById("concurrency"),
     tz: document.getElementById("tz"),
     strictness: document.getElementById("strictness"),
-    strictnessNum: document.getElementById("strictnessNum"),
-    strictnessHint: document.getElementById("strictnessHint"),
+    modeLabel: document.getElementById("modeLabel"),
     country: document.getElementById("country"),
+    trustedDomains: document.getElementById("trustedDomains"),
+    resetDomainsBtn: document.getElementById("resetDomainsBtn"),
+    saveDomainsBtn: document.getElementById("saveDomainsBtn"),
     customQuery: document.getElementById("customQuery"),
+    capital: document.getElementById("capital"),
+    stockTp: document.getElementById("stockTp"),
     runBtn: document.getElementById("runBtn"),
     saveBtn: document.getElementById("saveBtn"),
     exportBtn: document.getElementById("exportBtn"),
@@ -315,54 +345,25 @@
     pills: document.getElementById("pills"),
     meta: document.getElementById("meta"),
     history: document.getElementById("history"),
-    viewPicks: document.getElementById("viewPicks"),
+    viewDecision: document.getElementById("viewDecision"),
     viewHeadlines: document.getElementById("viewHeadlines"),
     viewTickers: document.getElementById("viewTickers"),
-    viewMethod: document.getElementById("viewMethod")
+    viewDiagnostics: document.getElementById("viewDiagnostics"),
+    viewMethod: document.getElementById("viewMethod"),
   };
 
   let lastScan = null;
 
-  // ---------- Runtime tuning (Strictness + Idea Mode) ----------
-  const RUNTIME = {
-    strictness: 0.70,    // 0..1
-    liqFloor: 0.55,      // dynamic
-    etfBonus: 1.12,      // dynamic
-    minCatalysts: 2,     // dynamic
-    minAvgTrade01: 0.58, // dynamic
-    ideaMode: false      // dynamic
-  };
-
-  function applyStrictnessFromUI(){
-    const v = Math.max(0, Math.min(100, Number(el.strictness.value || 70)));
-    el.strictness.value = String(v);
-    el.strictnessNum.value = String(v);
-
-    const s = v / 100;
-    RUNTIME.strictness = s;
-
-    // Relax as strictness falls
-    RUNTIME.liqFloor = 0.40 + s * (0.55 - 0.40);           // 0.40..0.55
-    RUNTIME.etfBonus = 1.03 + s * (1.12 - 1.03);           // 1.03..1.12
-    RUNTIME.minCatalysts = Math.round(s * 2);              // 0..2
-    RUNTIME.minAvgTrade01 = 0.20 + s * (0.58 - 0.20);      // 0.20..0.58
-    RUNTIME.ideaMode = (s <= 0.15);
-
-    const label = v >= 70 ? "strict" : v >= 45 ? "balanced" : "lenient";
-    el.strictnessHint.textContent =
-      `${v} = ${label} | ideaMode=${RUNTIME.ideaMode ? "ON" : "OFF"} | ` +
-      `minStrong=${RUNTIME.minCatalysts}, minAvg=${RUNTIME.minAvgTrade01.toFixed(2)}, ` +
-      `liqFloor=${RUNTIME.liqFloor.toFixed(2)}, ETFbonus=${RUNTIME.etfBonus.toFixed(2)}`;
-  }
-
   // ---------- Helpers ----------
   const clamp01 = (x) => Math.max(0, Math.min(1, x));
   const round2 = (x) => Math.round(x * 100) / 100;
+  const round4 = (x) => Math.round(x * 10000) / 10000;
 
   function setStatus(msg, isError=false){
     el.status.textContent = msg || "";
     el.status.className = "status" + (isError ? " error" : "");
   }
+
   function setPills(pairs){
     el.pills.innerHTML = "";
     for(const [k,v] of pairs){
@@ -372,11 +373,13 @@
       el.pills.appendChild(d);
     }
   }
+
   function escapeHtml(s){
     return String(s ?? "")
       .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
       .replaceAll('"',"&quot;").replaceAll("'","&#039;");
   }
+
   function fmtDate(dt, tz){
     try{
       return new Intl.DateTimeFormat(undefined, {
@@ -388,34 +391,237 @@
     }
   }
 
-  // Add trading days (Mon–Fri), ignoring holidays (good enough for a planning tool)
-  function addTradingDays(startDate, tradingDays){
-    const d = new Date(startDate.getTime());
-    let remaining = Math.max(0, Math.floor(tradingDays));
-    while(remaining > 0){
-      d.setDate(d.getDate() + 1);
-      const day = d.getDay(); // 0 Sun..6 Sat
-      if(day !== 0 && day !== 6) remaining--;
+  function parseDomains(text){
+    const raw = String(text || "");
+    return raw
+      .split(/[\n,;\s]+/g)
+      .map(x => x.trim().toLowerCase())
+      .filter(Boolean)
+      .filter(x => x.includes("."));
+  }
+
+  function domainAllowlistClause(domains){
+    if(!domains || !domains.length) return "";
+    // Use domainis: to avoid suffix collisions (e.g., un.org vs catholicsun.org)
+    const parts = domains.map(d => `domainis:${d}`);
+    return "(" + parts.join(" OR ") + ")";
+  }
+
+  // ---------- Strictness mapping ----------
+  function applyStrictnessFromUI(){
+    const sPct = Math.max(0, Math.min(100, Number(el.strictness.value || 70)));
+    const s = sPct / 100;
+
+    RUNTIME.strictness = s;
+
+    // Idea mode: always show best sensitivity picks if there is data
+    RUNTIME.ideaMode = (s <= 0.05);
+
+    // Gates tuned for "trusted-only" input (fewer headlines). Higher strictness still yields NO TRADE often.
+    RUNTIME.minAvgTrade01 = RUNTIME.ideaMode ? 0 : (0.18 + s * (0.45 - 0.18)); // 0.18..0.45
+    RUNTIME.minKept = RUNTIME.ideaMode ? 1 : Math.round(6 + s * 10);           // 6..16
+    RUNTIME.strongScoreCut   = RUNTIME.ideaMode ? 4 : (s >= 0.70 ? 6 : (s >= 0.45 ? 5 : 4));
+    RUNTIME.strongClarityCut = RUNTIME.ideaMode ? 0.30 : (s >= 0.70 ? 0.45 : (s >= 0.45 ? 0.38 : 0.30));
+    RUNTIME.requireStrong = !RUNTIME.ideaMode && (s >= 0.40);
+
+    el.modeLabel.textContent = RUNTIME.ideaMode ? "Idea Mode" : (s >= 0.75 ? "Strict" : (s >= 0.45 ? "Balanced" : "Lenient"));
+  }
+
+  // ---------- Scoring ----------
+  function tickerLiquidity(t){ return LIQ[t] ?? DEFAULT_LIQ; }
+  function tickerVol(t){ return VOL[t] ?? DEFAULT_VOL; }
+
+  // Catalyst clarity: “specific / actionable / market relevant” proxy from title.
+  function catalystClarity(title){
+    const t = (title || "").toLowerCase();
+    let score = 0.18;
+
+    const hasNumber = /(\d+(\.\d+)?)|(%|\$|bps|basis points|million|billion|mbpd)/i.test(title || "");
+    if(hasNumber) score += 0.18;
+
+    const actionVerbs = [
+      "announces","imposes","approves","ban","bans","halts","suspends","launches","strikes","attacks",
+      "cuts","raises","hikes","slashes","warns","sanctions","tariff","export controls","ceasefire",
+      "breach","ransomware","hack","exploit","zero-day","evacuation","earthquake","flood","wildfire"
+    ];
+    for(const w of actionVerbs){
+      if(t.includes(w)) score += 0.03;
     }
-    return d;
+
+    const specificityHints = ["opec","fed","ecb","boe","cpi","pce","brent","wti","pipeline","shipping lane","red sea","strait","export controls","tariffs"];
+    for(const w of specificityHints){
+      if(t.includes(w)) score += 0.05;
+    }
+
+    const soft = ["what you need to know","explainer","analysis","opinion","why it matters","live updates","timeline","explained"];
+    for(const w of soft){
+      if(t.includes(w)) score -= 0.05;
+    }
+
+    return clamp01(score);
   }
 
-  function forceEnglishQuery(q){
-    const hasLang = /sourcelang\s*:/i.test(q);
-    return hasLang ? q : (q.trim() + " sourcelang:english");
+  function isSoftHeadline(title){
+    const t = (title || "").toLowerCase();
+    const soft = ["what you need to know","explainer","analysis","opinion","why it matters","live updates","timeline","explained"];
+    return soft.some(w => t.includes(w));
   }
 
-  function buildQueryFromTerms(terms, country){
+  // Timing: prioritize recency, tuned for 15–20 day swings (half-life slower than day-trading).
+  function timingScore(seenDateUtc, nowUtc){
+    if(!seenDateUtc || !(seenDateUtc instanceof Date) || isNaN(seenDateUtc)) return 0.55;
+    const hours = Math.max(0, (nowUtc - seenDateUtc) / 36e5);
+    const halfLifeHrs = 48;
+    const score = Math.pow(0.5, hours / halfLifeHrs);
+    return clamp01(0.15 + 0.85 * score);
+  }
+
+  // Headline -> 1..10 impact
+  function headlineImpactScore({ topicKey, title, seenDate }, nowUtc){
+    const clarity = catalystClarity(title);
+    const timing = timingScore(seenDate, nowUtc);
+
+    const sectorWeights = TOPIC_SECTOR_WEIGHTS[topicKey] || {};
+    const sectors = Object.keys(sectorWeights);
+
+    let liqAvg = 0, volAvg = 0, n = 0;
+    for(const s of sectors){
+      const tickers = TICKER_GROUPS[s] || [];
+      for(const t of tickers){
+        liqAvg += tickerLiquidity(t);
+        volAvg += tickerVol(t);
+        n++;
+      }
+    }
+    liqAvg = n ? (liqAvg / n) : 0.55;
+    volAvg = n ? (volAvg / n) : 0.55;
+
+    const raw = clamp01(
+      0.45 * clarity +
+      0.25 * timing +
+      0.15 * liqAvg +
+      0.15 * volAvg
+    );
+
+    const score10 = Math.max(1, Math.min(10, Math.round(raw * 10)));
+    return { score10, clarity, timing, liqAvg, volAvg };
+  }
+
+  // Aggregate to tickers and also compute group contributions for diagnostics
+  function aggregateTickerScores(headlines){
+    const tickerInfo = {};
+    const tickerToGroup = {};
+    for(const [g, arr] of Object.entries(TICKER_GROUPS)){
+      for(const t of arr) tickerToGroup[t] = g;
+    }
+
+    const groupContrib = Object.fromEntries(Object.keys(TICKER_GROUPS).map(g => [g, 0]));
+
+    function ensure(t){
+      if(!tickerInfo[t]){
+        tickerInfo[t] = {
+          ticker:t,
+          group:tickerToGroup[t] || "unknown",
+          liq:tickerLiquidity(t),
+          vol:tickerVol(t),
+          score:0,
+          drivers:[],
+          breakdownByTopic: {}
+        };
+      }
+      return tickerInfo[t];
+    }
+
+    for(const h of headlines){
+      const sectorWeights = TOPIC_SECTOR_WEIGHTS[h.topicKey] || {};
+      const base = h.trade01; // 0..1
+      for(const [sector, w] of Object.entries(sectorWeights)){
+        const tickers = TICKER_GROUPS[sector] || [];
+        for(const t of tickers){
+          const info = ensure(t);
+          const lv = 0.55 * info.liq + 0.45 * info.vol;
+          const add = base * w * lv;
+          info.score += add;
+
+          info.breakdownByTopic[h.topicKey] = (info.breakdownByTopic[h.topicKey] || 0) + add;
+
+          if(add > 0.030){
+            info.drivers.push({
+              add,
+              topicKey: h.topicKey,
+              title: h.title,
+              url: h.url,
+              seenDate: h.seenDate
+            });
+          }
+
+          // group contribution (only positive adds, since long-only beneficiary bias)
+          groupContrib[sector] = (groupContrib[sector] || 0) + Math.max(0, add);
+        }
+      }
+    }
+
+    const arr = Object.values(tickerInfo);
+    const max = Math.max(0.000001, ...arr.map(x => x.score));
+    for(const x of arr){
+      x.scoreN = x.score / max;
+      x.score100 = Math.round(x.scoreN * 100);
+      x.drivers.sort((a,b)=>b.add-a.add);
+      x.drivers = x.drivers.slice(0,4);
+    }
+    arr.sort((a,b)=>b.score-a.score);
+
+    // normalize group contributions into shares
+    const totalGroup = Object.values(groupContrib).reduce((a,b)=>a+b, 0.000001);
+    const groupShares = Object.entries(groupContrib)
+      .map(([g,v]) => ({ group:g, value:v, share:v/totalGroup }))
+      .sort((a,b)=>b.value-a.value);
+
+    return { tickerTable: arr, groupShares };
+  }
+
+  // ---------- Fetch ----------
+  function parseGdeltSeenDate(s){
+    if(!s) return null;
+    const iso = String(s).replace(" ", "T") + "Z";
+    const d = new Date(iso);
+    return isNaN(d) ? null : d;
+  }
+
+  function buildQueryFromTerms(terms, country, trustedDomains){
     const core = "(" + terms.join(" OR ") + ")";
-    let q = core + " sourcelang:english";
+    let q = core;
+
+    // Enforce English + allowlist
+    q += ` sourcelang:${LOCKED_SOURCELANG}`;
+
     if(country) q += ` sourcecountry:${country}`;
+
+    const allow = domainAllowlistClause(trustedDomains);
+    if(allow) q += ` ${allow}`;
+
+    return q.trim();
+  }
+
+  function buildQueryFromCustom(custom, country, trustedDomains){
+    const core = "(" + custom.trim() + ")";
+    let q = core;
+
+    // Enforce English + allowlist
+    q += ` sourcelang:${LOCKED_SOURCELANG}`;
+
+    if(country) q += ` sourcecountry:${country}`;
+
+    const allow = domainAllowlistClause(trustedDomains);
+    if(allow) q += ` ${allow}`;
+
     return q.trim();
   }
 
   function buildGdeltUrl({ query, timespan, sort, maxrecords }){
     const url = new URL(GDELT_ENDPOINT);
     url.searchParams.set("query", query);
-    url.searchParams.set("mode", "artlist");
+    url.searchParams.set("mode", "ArtList");
     url.searchParams.set("format", "json");
     url.searchParams.set("timespan", timespan);
     url.searchParams.set("maxrecords", String(maxrecords));
@@ -436,278 +642,10 @@
     return results;
   }
 
-  // ---------- Catalyst logic ----------
-  function isCatalystHeadline(title){
-    const t = (title || "").toLowerCase();
-
-    // Reject obvious non-catalyst formats
-    const hardReject = [
-      "what you need to know","explainer","analysis","opinion","live updates","recap",
-      "how to","watch live","timeline","faq"
-    ];
-    if(hardReject.some(w => t.includes(w))) return false;
-
-    const hasNumber = /(\d+(\.\d+)?)|(%|\$|bps|basis points|million|billion|mbpd)/i.test(title || "");
-    const strongTerms = [
-      "announces","imposes","approves","bans","ban","halts","suspends","launches",
-      "cuts","raises","hikes","slashes","sanctions","tariff","export controls",
-      "airstrike","missile","attack","offensive","troop","mobilization",
-      "breach","ransomware","zero-day","exploit",
-      "evacuation","earthquake","magnitude","flood","wildfire",
-      "opec","opec+","production cut","quota",
-      "cpi","pce","federal reserve","ecb","boe","rate cut","rate hike"
-    ];
-    const hasStrong = strongTerms.some(w => t.includes(w));
-
-    if(hasNumber || hasStrong) return true;
-
-    // Lenient mode: allow weaker topic words
-    if(RUNTIME.strictness <= 0.45){
-      const topicWords = ["sanction","ceasefire","tariff","cyber","earthquake","flood","wildfire","inflation","recession","opec","oil","war","strike"];
-      if(topicWords.some(w => t.includes(w))) return true;
-    }
-    return false;
-  }
-
-  function effectiveTopicKey(topicKey, title){
-    const t = (title || "").toLowerCase();
-
-    if(topicKey === "ceasefire"){
-      const breakdown = ["violat","collapse","breaks down","ends","resumes","renewed","new attack","fails"];
-      if(breakdown.some(w => t.includes(w))) return "war";
-      return "ceasefire";
-    }
-
-    if(topicKey === "rates"){
-      if(t.includes("rate cut") || t.includes("cuts rates") || t.includes("cut interest")) return "rates_cut";
-      if(t.includes("rate hike") || t.includes("hikes rates") || t.includes("raise rates")) return "rates_hike";
-      return "rates_hike";
-    }
-
-    return topicKey;
-  }
-
-  function catalystClarity(title){
-    const t = (title || "").toLowerCase();
-    let score = 0.20;
-
-    const hasNumber = /(\d+(\.\d+)?)|(%|\$|bps|basis points|million|billion|mbpd)/i.test(title || "");
-    if(hasNumber) score += 0.18;
-
-    const actionVerbs = [
-      "announces","imposes","approves","ban","bans","halts","suspends","launches","strikes","attacks",
-      "cuts","raises","hikes","slashes","warns","sanctions","tariff","export controls","ceasefire",
-      "breach","ransomware","hack","exploit","zero-day","evacuation","earthquake","flood","wildfire"
-    ];
-    for(const w of actionVerbs){
-      if(t.includes(w)) score += 0.03;
-    }
-
-    const specificityHints = ["opec","fed","ecb","boe","cpi","pce","brent","wti","pipeline","shipping lane","red sea","strait"];
-    for(const w of specificityHints){
-      if(t.includes(w)) score += 0.05;
-    }
-
-    const vague = ["what you need to know","explainer","analysis","opinion","why it matters","live updates"];
-    for(const w of vague){
-      if(t.includes(w)) score -= 0.06;
-    }
-
-    return clamp01(score);
-  }
-
-  function timingScore(seenDateUtc, nowUtc){
-    if(!seenDateUtc || !(seenDateUtc instanceof Date) || isNaN(seenDateUtc)) return 0.55;
-    const hours = Math.max(0, (nowUtc - seenDateUtc) / 36e5);
-    const halfLifeHrs = 42;
-    const score = Math.pow(0.5, hours / halfLifeHrs);
-    return clamp01(0.15 + 0.85 * score);
-  }
-
-  function shockScore(title, topicKey){
-    const t = (title || "").toLowerCase();
-    let s = 0.35;
-    const bump = (words, inc) => { if(words.some(w => t.includes(w))) s += inc; };
-
-    if(["war","geopolitics","ceasefire"].includes(topicKey)){
-      bump(["missile","airstrike","drone","ballistic","offensive","troops","mobilization"], 0.25);
-      bump(["red sea","strait","shipping lane"], 0.10);
-    } else if(["sanctions","tariff"].includes(topicKey)){
-      bump(["export controls","blacklist","secondary sanctions","asset freeze","import duty","export ban"], 0.25);
-    } else if(topicKey === "cyber"){
-      bump(["ransomware","data breach","zero-day","critical vulnerability","exploit"], 0.30);
-    } else if(["earthquake","flood","wildfire"].includes(topicKey)){
-      bump(["magnitude","deadly","evacuat","infrastructure","power outage","refinery"], 0.25);
-    } else if(["inflation","recession","rates_cut","rates_hike","rates"].includes(topicKey)){
-      bump(["surprise","unexpected","beats","misses","guidance","bps","basis points"], 0.20);
-      bump(["cpi","pce","fed","ecb","boe"], 0.15);
-    } else if(["OPEC","oil"].includes(topicKey)){
-      bump(["production cut","quota","output","supply shock","pipeline","brent","wti"], 0.25);
-    }
-    return clamp01(s);
-  }
-
-  function headlineTradeability({ topicKey, title, seenDate }, nowUtc){
-    const clarity = catalystClarity(title);
-    const timing  = timingScore(seenDate, nowUtc);
-
-    if(!isCatalystHeadline(title)){
-      if(RUNTIME.strictness >= 0.70){
-        return { trade01: 0.0, score10: 1, clarity, timing, shock: 0, filteredOut: true, soft:false };
-      }
-      const shock = shockScore(title, topicKey);
-      const raw = clamp01(0.20 * clarity + 0.35 * timing + 0.45 * shock) * 0.55;
-      const score10 = Math.max(1, Math.min(10, Math.round(raw * 10)));
-      return { trade01: raw, score10, clarity, timing, shock, filteredOut: false, soft:true };
-    }
-
-    const shock = shockScore(title, topicKey);
-    const raw = clamp01(0.45 * clarity + 0.25 * timing + 0.30 * shock);
-    const score10 = Math.max(1, Math.min(10, Math.round(raw * 10)));
-    return { trade01: raw, score10, clarity, timing, shock, filteredOut: false, soft:false };
-  }
-
-  function tickerLiquidity(t){ return LIQ[t] ?? DEFAULT_LIQ; }
-  function tickerVol(t){ return VOL[t] ?? DEFAULT_VOL; }
-
-  function aggregateTickerScores(allHeadlines){
-    const tickerInfo = {};
-    const tickerToGroup = {};
-    for(const [g, arr] of Object.entries(TICKER_GROUPS)){
-      for(const t of arr) tickerToGroup[t] = g;
-    }
-
-    function ensure(t){
-      if(!tickerInfo[t]){
-        tickerInfo[t] = {
-          ticker:t,
-          group:tickerToGroup[t] || "unknown",
-          liq:tickerLiquidity(t),
-          vol:tickerVol(t),
-          isEtf: ETF_SET.has(t),
-          score:0,
-          drivers:[]
-        };
-      }
-      return tickerInfo[t];
-    }
-
-    for(const h of allHeadlines){
-      const sectorWeights = TOPIC_SECTOR_WEIGHTS[h.topicKey] || {};
-      const base = h.trade01 || 0;
-
-      for(const [sector, w] of Object.entries(sectorWeights)){
-        const tickers = TICKER_GROUPS[sector] || [];
-        for(const t of tickers){
-          const info = ensure(t);
-
-          // Eligibility: keep ETFs; for stocks enforce liquidity floor
-          if(!info.isEtf && info.liq < RUNTIME.liqFloor) continue;
-
-          const lv = 0.65 * info.liq + 0.35 * info.vol;
-          let add = base * w * lv;
-          if(info.isEtf) add *= RUNTIME.etfBonus;
-
-          info.score += add;
-
-          if(Math.abs(add) > 0.030){
-            info.drivers.push({
-              add,
-              topicKey: h.topicKey,
-              title: h.title,
-              url: h.url,
-              seenDate: h.seenDate,
-              soft: !!h.soft
-            });
-          }
-        }
-      }
-    }
-
-    const arr = Object.values(tickerInfo);
-    const maxAbs = Math.max(0.0001, ...arr.map(x => Math.abs(x.score)));
-
-    for(const x of arr){
-      x.scoreN = x.score / maxAbs;                // -1..+1
-      x.score100 = Math.round(Math.abs(x.scoreN) * 100);
-      x.drivers.sort((a,b)=>Math.abs(b.add)-Math.abs(a.add));
-      x.drivers = x.drivers.slice(0,4);
-    }
-
-    // Sort by absolute score
-    arr.sort((a,b)=>Math.abs(b.score)-Math.abs(a.score));
-    return arr;
-  }
-
-  // ---------- Trade plan math (manual price input) ----------
-  function computePlan({ ticker, isEtf, currentPrice, capital, stockTpPct }){
-    const px = Number(currentPrice);
-    const cap = Number(capital);
-
-    if(!isFinite(px) || px <= 0 || !isFinite(cap) || cap <= 0){
-      return { ok:false, reason:"Enter a valid price and capital." };
-    }
-
-    const pullback = isEtf ? ETF_PULLBACK : STOCK_PULLBACK;
-    const entry = px * (1 - pullback);
-
-    const tpPct = isEtf ? 0.15 : (Number(stockTpPct) / 100);
-    const slPct = isEtf ? -0.08 : -0.10;
-
-    const tp = entry * (1 + tpPct);
-    const sl = entry * (1 + slPct);
-
-    // Whole shares (simplest / broker-agnostic)
-    const shares = Math.floor(cap / entry);
-    const usedCapital = shares * entry;
-
-    if(shares <= 0){
-      return { ok:false, reason:`Capital is too small for 1 share at entry (~${entry.toFixed(2)}). Increase capital or choose a cheaper ticker.` };
-    }
-
-    // Fees: entry + one exit (TP/SL/time stop) = 2 executed orders
-    const fees = 2 * FEES_PER_EXECUTED_ORDER_USD;
-
-    const grossTP = (tp - entry) * shares;
-    const grossSL = (sl - entry) * shares; // negative
-
-    // Simple tax model: tax only on positive net profit after fees
-    const taxableProfit = Math.max(0, grossTP - fees);
-    const tax = taxableProfit * CAPITAL_GAINS_TAX;
-
-    const netTP = grossTP - fees - tax;
-    const netSL = grossSL - fees; // no tax applied to losses
-
-    const netTPpct = netTP / usedCapital;
-    const netSLpct = netSL / usedCapital;
-
-    // R multiple (risk/reward)
-    const riskPerShare = entry - sl;
-    const rewardPerShare = tp - entry;
-    const rr = riskPerShare > 0 ? (rewardPerShare / riskPerShare) : null;
-
-    return {
-      ok:true,
-      entry, tp, sl, shares, usedCapital, fees, tax,
-      grossTP, grossSL, netTP, netSL, netTPpct, netSLpct, rr,
-      tpPct, slPct, pullback
-    };
-  }
-
-  // ---------- Fetch ----------
-  function parseGdeltSeenDate(s){
-    if(!s) return null;
-    const iso = String(s).replace(" ", "T") + "Z";
-    const d = new Date(iso);
-    return isNaN(d) ? null : d;
-  }
-
   async function fetchTopic(topic, opts){
-    const baseQuery = opts.customQuery?.trim()
-      ? opts.customQuery.trim()
-      : buildQueryFromTerms(topic.terms, opts.country);
-
-    const query = forceEnglishQuery(baseQuery);
+    const query = (opts.customQuery && opts.customQuery.trim())
+      ? buildQueryFromCustom(opts.customQuery, opts.country, opts.trustedDomains)
+      : buildQueryFromTerms(topic.terms, opts.country, opts.trustedDomains);
 
     const url = buildGdeltUrl({
       query,
@@ -718,7 +656,6 @@
 
     const resp = await fetch(url);
     const text = await resp.text();
-
     let data;
     try { data = JSON.parse(text); }
     catch { throw new Error(`Non-JSON from GDELT (HTTP ${resp.status}): ${text.slice(0,160)}`); }
@@ -727,263 +664,180 @@
     return { topicKey: topic.key, topicLabel: topic.label, query, url, articles };
   }
 
+  // ---------- Decision / Gates ----------
+  function isCatalystHeadline(h){
+    // "Catalyst" here means: not pure fluff AND has minimum clarity/timing
+    if(!h) return false;
+    if(h.soft) return false; // strict: soft headlines are filtered out of "kept"
+    const c = h.clarity ?? 0;
+    const t = h.timing ?? 0;
+    // baseline gate (tuned for GDELT titles)
+    return (c >= 0.28 && t >= 0.25);
+  }
+
+  function computeDecisionMetrics(allHeadlines){
+    const kept = allHeadlines.filter(isCatalystHeadline);
+    const keptSorted = [...kept].sort((a,b)=>b.trade01-a.trade01);
+
+    const K = Math.max(5, Math.min(15, Math.round(keptSorted.length * 0.25) || 5));
+    const topK = keptSorted.slice(0, K);
+    const avgTopK = topK.length ? (topK.reduce((s,x)=>s + x.trade01, 0) / topK.length) : 0;
+
+    const strong = kept.filter(h => (h.score10 >= RUNTIME.strongScoreCut) && (h.clarity >= RUNTIME.strongClarityCut));
+
+    let decision = "NO TRADE";
+    const reasons = [];
+
+    if(RUNTIME.ideaMode){
+      decision = "IDEA MODE";
+      reasons.push("Strictness near 0: showing top sensitivity candidates even if strict discipline would say NO TRADE.");
+      return { kept, strong, avgTopK, K, decision, reasons };
+    }
+
+    if(kept.length < RUNTIME.minKept){
+      reasons.push(`Not enough catalyst headlines after filtering (kept ${kept.length} < min ${RUNTIME.minKept}).`);
+    }
+
+    if(RUNTIME.requireStrong && strong.length < 1){
+      reasons.push(`No strong catalysts found (need ≥1 at score≥${RUNTIME.strongScoreCut} and clarity≥${RUNTIME.strongClarityCut}).`);
+    }
+
+    if(avgTopK < RUNTIME.minAvgTrade01){
+      reasons.push(`Average tradability too low (avgTopK ${round2(avgTopK)} < min ${round2(RUNTIME.minAvgTrade01)}).`);
+    }
+
+    if(reasons.length === 0){
+      decision = "TRADE";
+      reasons.push("Catalyst density and tradability meet discipline gates.");
+    }
+
+    return { kept, strong, avgTopK, K, decision, reasons };
+  }
+
+  // ---------- Trade plan math ----------
+  function getInstrumentType(ticker){
+    return ETF_SET.has(ticker) ? "ETF" : "Stock";
+  }
+
+  function computeTradePlan({ ticker, instrumentType, manualPrice, capitalUsd, stockTpPct }){
+    const price = Number(manualPrice);
+    const cap = Number(capitalUsd);
+
+    if(!isFinite(price) || price <= 0) return { ok:false, error:"Enter a valid current price." };
+    if(!isFinite(cap) || cap <= 0) return { ok:false, error:"Enter a valid capital amount." };
+
+    const isETF = instrumentType === "ETF";
+
+    // Entry pullback
+    const pullback = isETF ? 0.003 : 0.007;
+    const entry = price * (1 - pullback);
+
+    // TP/SL
+    const tpPct = isETF ? 0.15 : Math.max(0.20, Math.min(0.25, Number(stockTpPct)/100));
+    const slPct = isETF ? -0.08 : -0.10;
+
+    const tp = entry * (1 + tpPct);
+    const slStop = entry * (1 + slPct);
+
+    // Stop-limit buffer (still "limit orders only" compliant)
+    const stopLimitBuffer = isETF ? 0.003 : 0.005;
+    const slLimit = slStop * (1 - stopLimitBuffer);
+
+    // Shares (integer)
+    const shares = Math.floor(cap / entry);
+    if(shares < 1){
+      return { ok:false, error:`Capital too small for 1 share at entry ~$${round2(entry)}.` };
+    }
+
+    const notional = shares * entry;
+
+    // Fees/tax
+    const feePerOrder = 8;
+    const fees = feePerOrder * 2; // buy + sell (TP or SL)
+    const taxRate = 0.25;
+
+    // TP scenario
+    const grossTp = shares * (tp - entry);
+    const netBeforeTaxTp = grossTp - fees;
+    const taxTp = Math.max(0, netBeforeTaxTp) * taxRate;
+    const netAfterTaxTp = netBeforeTaxTp - taxTp;
+
+    // SL scenario (loss, assume no tax credit)
+    const grossSl = shares * (slStop - entry); // negative
+    const netAfterTaxSl = grossSl - fees;
+
+    return {
+      ok:true,
+      shares,
+      instrumentType,
+      entry: round2(entry),
+      tp: round2(tp),
+      slStop: round2(slStop),
+      slLimit: round2(slLimit),
+      notional: round2(notional),
+      fees: round2(fees),
+      taxRate,
+      tpStats: {
+        gross: round2(grossTp),
+        netBeforeTax: round2(netBeforeTaxTp),
+        tax: round2(taxTp),
+        netAfterTax: round2(netAfterTaxTp)
+      },
+      slStats: {
+        gross: round2(grossSl),
+        netAfterTax: round2(netAfterTaxSl)
+      },
+      timeStop: isETF ? "15–20 trading days" : "10–15 trading days"
+    };
+  }
+
   // ---------- Render ----------
   function setActiveTab(tab){
     document.querySelectorAll(".tab").forEach(t=>{
       t.classList.toggle("active", t.dataset.tab === tab);
     });
-    el.viewPicks.style.display = tab==="picks" ? "" : "none";
+    el.viewDecision.style.display = tab==="decision" ? "" : "none";
     el.viewHeadlines.style.display = tab==="headlines" ? "" : "none";
     el.viewTickers.style.display = tab==="tickers" ? "" : "none";
+    el.viewDiagnostics.style.display = tab==="diagnostics" ? "" : "none";
     el.viewMethod.style.display = tab==="method" ? "" : "none";
   }
 
   function renderMethod(){
     el.viewMethod.innerHTML = `
       <div class="item">
-        <div class="title">Method</div>
+        <div class="title">What this app is (and isn’t)</div>
         <div class="smallnote">
-          English-only GDELT headlines → tradability score (1–10) using Clarity + Timing + Shock.
-          Then signed topic→sector weights map events into likely winners (+) and losers (-).
-          Output is long-oriented; negative “bias” is shown as a warning (and can be used later if you add short support).
+          This is a free, deterministic research scanner. It does not predict prices. It scores tradability proxies from headlines (Clarity + Timing + Liquidity + Volatility)
+          and maps topics to sector beneficiary bias (long-only). If strictness gates fail, it outputs NO TRADE.
+        </div>
+      </div>
+
+      <div class="item">
+        <div class="title">Headline tradability score (0..1) and impact (1–10)</div>
+        <div class="smallnote">
+          Each headline gets:
+          <span class="mono">clarity (0..1)</span> from title specificity,
+          <span class="mono">timing (0..1)</span> from recency decay,
+          plus sector average <span class="mono">liq/vol</span>.
+          The resulting proxy is mapped to an impact <span class="mono">1..10</span>.
         </div>
         <div class="scoreline">
-          <span class="badge"><span class="dot ok"></span><b>Strictness</b> controls filter hardness + gates</span>
-          <span class="badge"><span class="dot ok"></span><b>Idea Mode</b> turns ON at ≤15% strictness to force picks</span>
-          <span class="badge"><span class="dot ok"></span><b>Discipline Layer</b> prints LIMIT + OCO + time stop + fees/tax math (manual price)</span>
+          <span class="badge"><span class="dot ok"></span><b>Clarity</b> title specificity / action verbs / numbers</span>
+          <span class="badge"><span class="dot ok"></span><b>Timing</b> half-life ~48h (swing-oriented)</span>
+          <span class="badge"><span class="dot ok"></span><b>Liquidity</b> heuristic table</span>
+          <span class="badge"><span class="dot ok"></span><b>Volatility</b> heuristic table</span>
         </div>
       </div>
-    `;
-  }
 
-  function renderPicks(scan){
-    if(scan.noTrade){
-      el.viewPicks.innerHTML = `
-        <div class="item">
-          <div class="title">NO TRADE</div>
-          <div class="sub">
-            <span class="badge"><span class="dot bad"></span><b>Strong catalysts:</b> ${scan.strongCatalysts}</span>
-            <span class="badge"><b>AvgTopK tradeability:</b> ${round2(scan.avgTrade01)}</span>
-            <span class="badge"><b>AvgAll:</b> ${round2(scan.avgAllTrade01)}</span>
-            <span class="badge"><b>Kept:</b> ${scan.countKept}</span>
-            <span class="badge"><b>Strictness:</b> ${scan.strictnessPct}%</span>
-          </div>
-          <div class="smallnote" style="margin-top:8px;">
-            Reduce Strictness, increase lookback, or remove filters. At ≤15% strictness, Idea Mode forces picks.
-          </div>
-        </div>
-      `;
-      return;
-    }
-
-    const picks = scan.topPicks || [];
-    if(!picks.length){
-      el.viewPicks.innerHTML = `<div class="item">No picks.</div>`;
-      return;
-    }
-
-    const tz = scan.opts.tz;
-    const head = scan.ideaMode ? "IDEA MODE (Low Conviction)" : "Top 3 Picks";
-
-    const preface = `
       <div class="item">
-        <div class="title">${head}</div>
+        <div class="title">Trust filters (enforced)</div>
         <div class="smallnote">
-          System discipline: choose ONE active trade at a time. Use the plans below as templates; enter a current price per ticker to compute exact orders.
+          Queries always enforce <span class="mono">sourcelang:english</span> AND your trusted-domain allowlist using <span class="mono">domainis:</span>.
+          This improves trust but reduces coverage.
         </div>
       </div>
     `;
-
-    const cards = picks.map((p, idx) => {
-      const bias = p.score >= 0 ? "winner bias (long candidate)" : "loser bias (avoid for long)";
-      const dirDot = p.score >= 0 ? "ok" : "bad";
-
-      const isEtf = !!p.isEtf;
-      const timeboxTd = isEtf ? ETF_TIMEBOX_TD : STOCK_TIMEBOX_TD;
-      const review2Td = Math.max(1, Math.round(timeboxTd * REVIEW2_FRACTION));
-
-      const timeStop = addTradingDays(new Date(scan.createdAt), timeboxTd);
-      const review1 = addTradingDays(new Date(scan.createdAt), REVIEW1_TD);
-      const review2 = addTradingDays(new Date(scan.createdAt), review2Td);
-
-      const drivers = (p.drivers || []).map(d => {
-        const when = d.seenDate ? fmtDate(new Date(d.seenDate), tz) : "";
-        const soft = d.soft ? `<span class="badge"><span class="dot warn"></span>soft</span>` : "";
-        const sign = d.add >= 0 ? "+" : "";
-        return `
-          <div class="sub" style="margin-top:6px;">
-            <span class="badge"><span class="dot ${dirDot}"></span>${sign}${round2(d.add)} driver</span>
-            ${soft}
-            <span>${escapeHtml(d.topicKey)}</span>
-            <a href="${escapeHtml(d.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(d.title)}</a>
-            <span>${escapeHtml(when)}</span>
-          </div>
-        `;
-      }).join("");
-
-      // Trade plan UI IDs
-      const idBase = `p${idx}_${p.ticker}`;
-      const priceId = `${idBase}_price`;
-      const capId = `${idBase}_cap`;
-      const tpSelId = `${idBase}_tppct`;
-      const outId = `${idBase}_out`;
-
-      // Default capital: 1500
-      // Default stock TP: 22 (mid of 20–25). ETF TP fixed at 15%.
-      const planUI = `
-        <div class="planBox">
-          <h3>Discipline Trade Plan (manual price input)</h3>
-
-          <div class="miniGrid3">
-            <div>
-              <label>Enter current price (USD)</label>
-              <input id="${priceId}" type="number" min="0" step="0.01" placeholder="e.g. 112.35" />
-            </div>
-            <div>
-              <label>Capital per trade (USD)</label>
-              <input id="${capId}" type="number" min="1000" max="2000" step="10" value="1500" />
-            </div>
-            <div>
-              <label>Stock TP % (only stocks)</label>
-              <select id="${tpSelId}" ${isEtf ? "disabled" : ""}>
-                <option value="20">20%</option>
-                <option value="22" selected>22%</option>
-                <option value="25">25%</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="smallnote">
-            Entry is LIMIT at a small pullback (ETF −0.3%, Stock −0.7%). Exits: OCO TP/SL + time-stop.
-            Fees assumed: $${FEES_PER_EXECUTED_ORDER_USD} per executed order (entry + one exit). Tax: 25% on gains (simple model).
-          </div>
-
-          <div id="${outId}" class="smallnote"></div>
-
-          <div class="smallnote">
-            Reviews: <span class="mono">${fmtDate(review1, tz)}</span> (day 5–7),
-            <span class="mono">${fmtDate(review2, tz)}</span> (~2/3 timebox).
-            Time-stop exit: <span class="mono">${fmtDate(timeStop, tz)}</span>.
-          </div>
-        </div>
-      `;
-
-      return `
-        <div class="item">
-          <div class="title">${idx+1}) ${escapeHtml(p.ticker)} <span class="badge">${escapeHtml(p.group)}</span></div>
-          <div class="sub">
-            <span class="badge"><span class="dot ${dirDot}"></span><b>Abs sensitivity:</b> ${p.score100}/100</span>
-            <span class="badge"><b>Bias:</b> ${bias}</span>
-            <span class="badge"><b>ETF:</b> ${isEtf ? "yes" : "no"}</span>
-            <span class="badge"><b>Liquidity:</b> ${round2(p.liq)}</span>
-            <span class="badge"><b>Volatility:</b> ${round2(p.vol)}</span>
-            <span class="badge"><b>Timebox:</b> ${timeboxTd} td</span>
-          </div>
-
-          <div class="smallnote" style="margin-top:8px;">
-            Why this matters now: this ticker has the strongest event-sensitivity to the current headline set, within a 2–4 week reaction window.
-          </div>
-
-          ${p.score < 0 ? `
-            <div class="smallnote badText" style="margin-top:8px;">
-              Note: “loser bias” suggests headwind exposure. Long trade plan is still computed as a template, but you should treat this as “avoid/hedge” unless you add short support.
-            </div>
-          ` : ""}
-
-          ${drivers ? `<div style="margin-top:8px;"><div class="sub"><b>Top drivers:</b></div>${drivers}</div>` : ""}
-
-          ${planUI}
-        </div>
-      `;
-    }).join("");
-
-    el.viewPicks.innerHTML = preface + cards;
-
-    // Attach plan calculators after DOM injection
-    picks.forEach((p, idx) => {
-      const idBase = `p${idx}_${p.ticker}`;
-      const priceEl = document.getElementById(`${idBase}_price`);
-      const capEl   = document.getElementById(`${idBase}_cap`);
-      const tpEl    = document.getElementById(`${idBase}_tppct`);
-      const outEl   = document.getElementById(`${idBase}_out`);
-
-      if(!priceEl || !capEl || !tpEl || !outEl) return;
-
-      const isEtf = !!p.isEtf;
-
-      const renderOut = () => {
-        const price = Number(priceEl.value);
-        const cap = Number(capEl.value);
-        const stockTpPct = Number(tpEl.value || 22);
-
-        const plan = computePlan({
-          ticker: p.ticker,
-          isEtf,
-          currentPrice: price,
-          capital: cap,
-          stockTpPct
-        });
-
-        // Validation: discipline capital bounds
-        const capWarn =
-          (isFinite(cap) && (cap < 1000 || cap > 2000))
-            ? `<span class="badge"><span class="dot warn"></span><b>Capital out of bounds:</b> keep $1,000–$2,000</span>`
-            : "";
-
-        if(!plan.ok){
-          outEl.innerHTML = `
-            <div class="kpi">
-              ${capWarn}
-              <span class="badge"><span class="dot warn"></span>${escapeHtml(plan.reason)}</span>
-            </div>
-          `;
-          return;
-        }
-
-        const entry = plan.entry;
-        const tp = plan.tp;
-        const sl = plan.sl;
-
-        const tpPctTxt = isEtf ? "15%" : `${Math.round(plan.tpPct*100)}%`;
-        const slPctTxt = isEtf ? "-8%" : "-10%";
-
-        const rrTxt = (plan.rr == null) ? "—" : plan.rr.toFixed(2);
-
-        const netTpColor = plan.netTP >= 0 ? "ok" : "bad";
-        const netSlColor = plan.netSL >= 0 ? "ok" : "bad";
-
-        outEl.innerHTML = `
-          <div class="kpi">
-            ${capWarn}
-            <span class="badge"><span class="dot ok"></span><b>Shares:</b> ${plan.shares}</span>
-            <span class="badge"><b>Used capital:</b> $${plan.usedCapital.toFixed(2)}</span>
-            <span class="badge"><b>Fees (est.):</b> $${plan.fees.toFixed(2)}</span>
-          </div>
-
-          <div class="planLine">
-            <span class="badge"><b>LIMIT Entry:</b> $${entry.toFixed(2)} (${isEtf ? "-0.3%" : "-0.7%"})</span>
-            <span class="badge"><b>OCO TP:</b> $${tp.toFixed(2)} (${tpPctTxt})</span>
-            <span class="badge"><b>OCO SL:</b> $${sl.toFixed(2)} (${slPctTxt})</span>
-            <span class="badge"><b>R:R:</b> ${rrTxt}</span>
-          </div>
-
-          <div class="planLine">
-            <span class="badge"><span class="dot ${netTpColor}"></span><b>TP net (after fees+tax):</b> $${plan.netTP.toFixed(2)} (${(plan.netTPpct*100).toFixed(1)}%)</span>
-            <span class="badge"><span class="dot ${netSlColor}"></span><b>SL net (after fees):</b> $${plan.netSL.toFixed(2)} (${(plan.netSLpct*100).toFixed(1)}%)</span>
-            <span class="badge"><b>Tax on TP (est.):</b> $${plan.tax.toFixed(2)}</span>
-          </div>
-
-          <div class="smallnote">
-            Execution: place the LIMIT buy, then immediately place an OCO (TP/SL). If neither fills by the time-stop date, exit at market.
-          </div>
-        `;
-      };
-
-      priceEl.addEventListener("input", renderOut);
-      capEl.addEventListener("input", renderOut);
-      tpEl.addEventListener("change", renderOut);
-      renderOut();
-    });
   }
 
   function renderHeadlines(scan){
@@ -993,7 +847,7 @@
       const items = (t.items || []).map(h => {
         const when = h.seenDate ? fmtDate(new Date(h.seenDate), tz) : "";
         const dotClass = h.score10 >= 7 ? "ok" : (h.score10 <= 3 ? "bad" : "warn");
-        const soft = h.soft ? `<span class="badge"><span class="dot warn"></span>soft</span>` : "";
+        const softTag = h.soft ? `<span class="badge"><span class="dot warn"></span>soft</span>` : "";
         return `
           <div class="item">
             <div class="title">
@@ -1002,28 +856,24 @@
             <div class="sub">
               <span>${escapeHtml(h.domain || "")}</span>
               <span>${escapeHtml(when)}</span>
-              <span class="badge"><span class="dot ${dotClass}"></span><b>Tradeability:</b> ${h.score10}/10</span>
-              ${soft}
+              <span class="badge"><span class="dot ${dotClass}"></span><b>Impact:</b> ${h.score10}/10</span>
               <span class="badge"><b>Clarity:</b> ${round2(h.clarity)}</span>
               <span class="badge"><b>Timing:</b> ${round2(h.timing)}</span>
-              <span class="badge"><b>Shock:</b> ${round2(h.shock)}</span>
-              <span class="badge"><b>TopicKey:</b> ${escapeHtml(h.topicKey)}</span>
+              ${softTag}
             </div>
             <div class="smallnote mono" style="margin-top:8px; word-break:break-word;">${escapeHtml(h.url)}</div>
           </div>
         `;
       }).join("");
 
+      const err = t.error ? `<div class="item badbox"><div class="title">Error</div><div class="smallnote">${escapeHtml(t.error)}</div></div>` : "";
       return `
         <div class="item">
-          <div class="title">${escapeHtml(t.topicLabel)}
-            <span class="badge">raw ${t.rawCount}</span>
-            <span class="badge">kept ${t.items.length}</span>
-          </div>
+          <div class="title">${escapeHtml(t.topicLabel)} <span class="badge">top ${t.items.length}</span></div>
           <div class="smallnote">Query: <span class="mono">${escapeHtml(t.query)}</span></div>
           <div class="smallnote">Source: <a href="${escapeHtml(t.url)}" target="_blank" rel="noopener noreferrer">open in GDELT</a></div>
-          ${t.error ? `<div class="smallnote badText">Error: ${escapeHtml(t.error)}</div>` : ""}
-          <div style="margin-top:10px;" class="results">${items || `<div class="item">No kept catalysts for this topic.</div>`}</div>
+          ${err}
+          <div style="margin-top:10px;" class="results">${items || `<div class="item">No results.</div>`}</div>
         </div>
       `;
     }).join("");
@@ -1033,311 +883,74 @@
 
   function renderTickers(scan){
     const rows = (scan.tickerTable || []).slice(0, 40).map(x => {
-      const dirDot = x.score >= 0 ? "ok" : "bad";
-      const bias = x.score >= 0 ? "winner bias" : "loser bias";
+      const itype = getInstrumentType(x.ticker);
       return `
         <div class="item">
-          <div class="title">${escapeHtml(x.ticker)} <span class="badge">${escapeHtml(x.group)}</span></div>
+          <div class="title">${escapeHtml(x.ticker)} <span class="badge">${escapeHtml(x.group)}</span> <span class="badge">${itype}</span></div>
           <div class="sub">
-            <span class="badge"><span class="dot ${dirDot}"></span><b>Abs sensitivity:</b> ${x.score100}/100</span>
-            <span class="badge"><b>Bias:</b> ${bias}</span>
-            <span class="badge"><b>ETF:</b> ${x.isEtf ? "yes" : "no"}</span>
+            <span class="badge"><b>Score:</b> ${x.score100}/100</span>
             <span class="badge"><b>Liq:</b> ${round2(x.liq)}</span>
             <span class="badge"><b>Vol:</b> ${round2(x.vol)}</span>
           </div>
           ${x.drivers?.length ? `
             <div class="smallnote" style="margin-top:8px;">
-              Drivers: ${x.drivers.map(d => `${escapeHtml(d.topicKey)} (${d.add>=0?"+":""}${round2(d.add)})${d.soft ? " [soft]" : ""}`).join(", ")}
+              Drivers: ${x.drivers.map(d => `${escapeHtml(d.topicKey)} (+${round2(d.add)})`).join(", ")}
             </div>
-          ` : `<div class="smallnote" style="margin-top:8px;">No drivers stored.</div>`}
+          ` : `<div class="smallnote" style="margin-top:8px;">No strong drivers detected.</div>`}
         </div>
       `;
     }).join("");
     el.viewTickers.innerHTML = rows || `<div class="item">No ticker table.</div>`;
   }
 
-  function renderAll(scan){
-    el.meta.textContent =
-      `Scan @ ${fmtDate(new Date(scan.createdAt), scan.opts.tz)} | raw: ${scan.countRaw} | kept: ${scan.countKept} | strong: ${scan.strongCatalysts} | avgTopK: ${round2(scan.avgTrade01)} | avgAll: ${round2(scan.avgAllTrade01)} | strict: ${scan.strictnessPct}% | ideaMode: ${scan.ideaMode ? "ON" : "OFF"}`;
-    renderPicks(scan);
-    renderHeadlines(scan);
-    renderTickers(scan);
-    renderMethod();
+  function renderDiagnostics(scan){
+    const gs = scan.groupShares || [];
+    const top3 = gs.slice(0,3);
+
+    const bars = gs.map(g => {
+      const pct = Math.round(g.share * 100);
+      return `
+        <div class="item">
+          <div class="title">${escapeHtml(g.group)}</div>
+          <div class="sub">
+            <span class="badge"><b>Share:</b> ${pct}%</span>
+            <span class="badge"><b>Contribution:</b> ${round4(g.value)}</span>
+          </div>
+          <div class="bar" style="margin-top:10px;"><div style="width:${pct}%;"></div></div>
+          <div class="smallnote">
+            Interpretation: this share measures how much this sector group contributed to long-bias scoring across all kept headlines.
+            If one group dominates, repeated picks from that group (e.g., Energy → XOP) can be a legitimate consequence of the day’s news mix.
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    const note = top3.length ? `
+      <div class="item warnbox">
+        <div class="title">Concentration note</div>
+        <div class="smallnote">
+          Top contributing groups this scan:
+          <b>${escapeHtml(top3.map(x => `${x.group} (${Math.round(x.share*100)}%)`).join(", "))}</b>.
+          If Energy is consistently dominant, repeated Energy picks are expected unless the headline mix changes.
+        </div>
+      </div>
+    ` : "";
+
+    el.viewDiagnostics.innerHTML = note + (bars || `<div class="item">No diagnostics available.</div>`);
   }
 
-  // ---------- History ----------
-  const STORAGE_KEY = "trade_scanner_history_v5";
+  function renderDecision(scan){
+    const tz = scan.opts.tz;
+    const dec = scan.decisionMetrics;
 
-  function loadHistory(){
-    const raw = localStorage.getItem(STORAGE_KEY);
-    let arr = [];
-    try { arr = raw ? JSON.parse(raw) : []; } catch {}
-    return Array.isArray(arr) ? arr : [];
-  }
+    const decisionBadge = dec.decision === "TRADE"
+      ? `<span class="badge"><span class="dot ok"></span><b>TRADE</b></span>`
+      : (dec.decision === "IDEA MODE"
+        ? `<span class="badge"><span class="dot warn"></span><b>IDEA MODE</b></span>`
+        : `<span class="badge"><span class="dot bad"></span><b>NO TRADE</b></span>`);
 
-  function saveHistory(arr){
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(arr.slice(0, 30)));
-  }
+    const reasons = dec.reasons.map(r => `<div class="smallnote">• ${escapeHtml(r)}</div>`).join("");
 
-  function refreshHistoryDropdown(){
-    const arr = loadHistory();
-    el.history.innerHTML = "";
-    const opt0 = document.createElement("option");
-    opt0.value = "";
-    opt0.textContent = "— Select saved scan —";
-    el.history.appendChild(opt0);
-
-    for(let i=0;i<arr.length;i++){
-      const s = arr[i];
-      const o = document.createElement("option");
-      o.value = String(i);
-      const dt = new Date(s.createdAt);
-      const top = (s.topPicks || []).map(x=>x.ticker).join(", ");
-      o.textContent = `${i+1}) ${dt.toLocaleString()} | ${s.noTrade ? "NO TRADE" : "Top: " + (top || "—")}`;
-      el.history.appendChild(o);
-    }
-  }
-
-  // ---------- Main run ----------
-  async function runScan(){
-    setStatus("");
-    el.runBtn.disabled = true;
-    el.saveBtn.disabled = true;
-    el.exportBtn.disabled = true;
-
-    applyStrictnessFromUI();
-
-    const nowUtc = new Date();
-    const opts = {
-      timespan: el.timespan.value,
-      sort: el.sort.value,
-      perTopic: Math.max(1, Math.min(25, Number(el.perTopic.value || 5))),
-      concurrency: Math.max(1, Math.min(10, Number(el.concurrency.value || 4))),
-      tz: el.tz.value || "Asia/Jerusalem",
-      country: el.country.value.trim(),
-      customQuery: el.customQuery.value
-    };
-
-    setPills([
-      ["timespan", opts.timespan],
-      ["sort", opts.sort || "relevance"],
-      ["perTopic", opts.perTopic],
-      ["concurrency", opts.concurrency],
-      ["language", "english"],
-      ["strictness", `${Math.round(RUNTIME.strictness*100)}%`],
-      ["ideaMode", RUNTIME.ideaMode ? "ON" : "OFF"],
-      ["minStrong", RUNTIME.minCatalysts],
-      ["minAvg", RUNTIME.minAvgTrade01.toFixed(2)],
-      ["liqFloor", RUNTIME.liqFloor.toFixed(2)],
-      ["ETFbonus", RUNTIME.etfBonus.toFixed(2)],
-      ["sourcecountry", opts.country || "—"]
-    ]);
-
-    setStatus("Fetching English headlines from GDELT…");
-
-    let byTopicRaw;
-    try{
-      byTopicRaw = await mapLimit(TOPICS, opts.concurrency, async (topic) => {
-        try{
-          const r = await fetchTopic(topic, opts);
-          return { ...r, error: null };
-        }catch(e){
-          return { topicKey: topic.key, topicLabel: topic.label, query: "", url: "", articles: [], error: String(e.message || e) };
-        }
-      });
-    }catch(e){
-      setStatus(String(e.message || e), true);
-      el.runBtn.disabled = false;
-      return;
-    }
-
-    const keptAll = [];
-    let countRaw = 0;
-
-    const scoredByTopic = byTopicRaw.map(t => {
-      const rawArticles = (t.articles || []);
-      countRaw += rawArticles.length;
-
-      const items = rawArticles.map(a => {
-        const title = a.title || "(no title)";
-        const url = a.url || a.url_mobile || "#";
-        const domain = a.domain || "";
-        const seenDate = parseGdeltSeenDate(a.seendate || a.seenDate || "");
-
-        const effKey = effectiveTopicKey(t.topicKey, title);
-        const r = headlineTradeability({ topicKey: effKey, title, seenDate }, nowUtc);
-        if(r.filteredOut) return null;
-
-        const h = {
-          topicKey: effKey,
-          topicLabel: t.topicLabel,
-          title, url, domain,
-          seenDate: seenDate ? seenDate.toISOString() : null,
-          trade01: r.trade01,
-          score10: r.score10,
-          clarity: r.clarity,
-          timing: r.timing,
-          shock: r.shock,
-          soft: r.soft
-        };
-        keptAll.push(h);
-        return h;
-      }).filter(Boolean);
-
-      return {
-        topicKey: t.topicKey,
-        topicLabel: t.topicLabel,
-        query: t.query,
-        url: t.url,
-        error: t.error,
-        rawCount: rawArticles.length,
-        items
-      };
-    });
-
-    const tickerTable = aggregateTickerScores(keptAll);
-
-    // Dynamic "strong" thresholds based on strictness
-    const strongScoreCut =
-      (RUNTIME.strictness >= 0.70) ? 7 :
-      (RUNTIME.strictness >= 0.45) ? 6 : 5;
-
-    const strongClarityCut =
-      (RUNTIME.strictness >= 0.70) ? 0.55 :
-      (RUNTIME.strictness >= 0.45) ? 0.45 : 0.35;
-
-    const strongCatalysts = keptAll.filter(h =>
-      h.score10 >= strongScoreCut &&
-      h.clarity >= strongClarityCut &&
-      (RUNTIME.strictness >= 0.45 ? !h.soft : true)
-    ).length;
-
-    // Average only top-K to avoid dilution
-    const K = Math.min(12, keptAll.length);
-    const topK = keptAll.slice().sort((a,b)=>(b.trade01||0)-(a.trade01||0)).slice(0, K);
-    const avgTrade01 = K ? (topK.reduce((s,h)=>s + (h.trade01 || 0), 0) / K) : 0;
-    const avgAllTrade01 = keptAll.length ? (keptAll.reduce((s,h)=>s + (h.trade01 || 0), 0) / keptAll.length) : 0;
-
-    let noTrade = false;
-    let topPicks = [];
-
-    if(keptAll.length === 0){
-      noTrade = true;
-    } else if(!RUNTIME.ideaMode && (strongCatalysts < RUNTIME.minCatalysts || avgTrade01 < RUNTIME.minAvgTrade01)){
-      noTrade = true;
-    } else {
-      topPicks = tickerTable.slice(0,3);
-
-      // In non-idea mode, require the top pick to be positive (beneficiary) for long setups
-      if(!RUNTIME.ideaMode && topPicks.length && topPicks[0].score <= 0) noTrade = true;
-
-      if(noTrade && RUNTIME.ideaMode) noTrade = false;
-      if(noTrade) topPicks = [];
-    }
-
-    const scan = {
-      createdAt: nowUtc.toISOString(),
-      opts,
-      byTopic: scoredByTopic,
-      countRaw,
-      countKept: keptAll.length,
-      strongCatalysts,
-      avgTrade01,
-      avgAllTrade01,
-      noTrade,
-      tickerTable,
-      topPicks,
-      strictnessPct: Math.round(RUNTIME.strictness * 100),
-      ideaMode: RUNTIME.ideaMode
-    };
-
-    lastScan = scan;
-
-    if(countRaw === 0){
-      setStatus("No headlines returned. Try a longer lookback or remove filters.", true);
-    } else if(scan.noTrade){
-      setStatus(`NO TRADE: gates not met (strong=${scan.strongCatalysts}, avgTopK=${round2(scan.avgTrade01)}, kept=${scan.countKept}, strict=${scan.strictnessPct}%).`, true);
-    } else if(scan.ideaMode){
-      setStatus(`IDEA MODE ON: picks forced (strict=${scan.strictnessPct}%). Treat as low conviction.`);
-    } else {
-      const errCount = scoredByTopic.filter(x=>x.error).length;
-      setStatus(errCount ? `Completed with ${errCount} topic errors (see Headlines tab).` : "Completed.");
-    }
-
-    renderAll(scan);
-    el.runBtn.disabled = false;
-    el.saveBtn.disabled = false;
-    el.exportBtn.disabled = false;
-  }
-
-  // ---------- Export / Save ----------
-  function saveCurrent(){
-    if(!lastScan) return;
-    const arr = loadHistory();
-    arr.unshift(lastScan);
-    saveHistory(arr);
-    refreshHistoryDropdown();
-    setStatus("Saved to History.");
-  }
-
-  function exportJson(){
-    if(!lastScan) return;
-    const blob = new Blob([JSON.stringify(lastScan, null, 2)], { type:"application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `scan_${new Date(lastScan.createdAt).toISOString().replaceAll(":","-")}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }
-
-  function clearHistory(){
-    localStorage.removeItem(STORAGE_KEY);
-    refreshHistoryDropdown();
-    setStatus("History cleared.");
-  }
-
-  function loadFromHistoryIndex(idx){
-    const arr = loadHistory();
-    const scan = arr[idx];
-    if(!scan) return;
-    lastScan = scan;
-    setStatus("Loaded saved scan (no re-fetch).");
-    renderAll(scan);
-    el.saveBtn.disabled = false;
-    el.exportBtn.disabled = false;
-  }
-
-  // ---------- Events ----------
-  document.querySelectorAll(".tab").forEach(t=>{
-    t.addEventListener("click", () => setActiveTab(t.dataset.tab));
-  });
-
-  el.runBtn.addEventListener("click", runScan);
-  el.saveBtn.addEventListener("click", saveCurrent);
-  el.exportBtn.addEventListener("click", exportJson);
-  el.clearHistoryBtn.addEventListener("click", clearHistory);
-
-  el.history.addEventListener("change", () => {
-    const v = el.history.value;
-    if(!v) return;
-    loadFromHistoryIndex(Number(v));
-  });
-
-  el.strictness.addEventListener("input", applyStrictnessFromUI);
-  el.strictnessNum.addEventListener("change", () => {
-    el.strictness.value = el.strictnessNum.value;
-    applyStrictnessFromUI();
-  });
-
-  // Init
-  refreshHistoryDropdown();
-  setActiveTab("picks");
-  renderMethod();
-  applyStrictnessFromUI();
-})();
-</script>
-</body>
-</html>
+    const kpi = `
+      <div class="kpi">
+        <div class="box"><b>raw headlines</
