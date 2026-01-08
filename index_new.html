@@ -1,0 +1,1509 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Catalyst Desk — Daily Routine (Single-File)</title>
+  <style>
+    :root{
+      --bg:#0b1220;
+      --panel:#0f1a2f;
+      --panel2:#0c162a;
+      --text:#e7eefc;
+      --muted:#9bb0d0;
+      --line:#20365f;
+      --accent:#6ee7ff;
+      --good:#34d399;
+      --warn:#fbbf24;
+      --bad:#fb7185;
+      --btn:#14274a;
+      --btn2:#0f2140;
+      --chip:#132445;
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --radius: 16px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      background: radial-gradient(1200px 600px at 20% 0%, #162b55 0%, var(--bg) 55%) fixed;
+      color:var(--text);
+      font-family: var(--sans);
+      line-height:1.35;
+    }
+    header{
+      padding:18px 18px 10px;
+      position: sticky;
+      top:0;
+      background: linear-gradient(180deg, rgba(11,18,32,.92) 0%, rgba(11,18,32,.70) 70%, rgba(11,18,32,0) 100%);
+      backdrop-filter: blur(10px);
+      z-index:5;
+    }
+    .topbar{
+      display:flex;
+      gap:12px;
+      align-items:center;
+      justify-content:space-between;
+      flex-wrap:wrap;
+    }
+    .brand{
+      display:flex;
+      gap:12px;
+      align-items:center;
+    }
+    .logo{
+      width:38px;height:38px;border-radius:12px;
+      background: linear-gradient(135deg, rgba(110,231,255,.25), rgba(52,211,153,.18));
+      border:1px solid rgba(110,231,255,.25);
+      box-shadow: var(--shadow);
+      display:grid;place-items:center;
+      font-weight:800;
+      letter-spacing:.5px;
+      color:var(--accent);
+    }
+    h1{
+      font-size:16px;
+      margin:0;
+      letter-spacing:.2px;
+    }
+    .sub{
+      font-size:12px;
+      color:var(--muted);
+      margin-top:2px;
+    }
+    .right{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+    .pill{
+      background: rgba(15,26,47,.75);
+      border:1px solid rgba(32,54,95,.9);
+      padding:8px 10px;
+      border-radius:999px;
+      font-size:12px;
+      color:var(--muted);
+      display:flex;
+      gap:8px;
+      align-items:center;
+    }
+    .pill strong{color:var(--text); font-weight:700}
+    .btn{
+      background: linear-gradient(180deg, var(--btn), var(--btn2));
+      border:1px solid rgba(32,54,95,.95);
+      color:var(--text);
+      padding:9px 12px;
+      border-radius:12px;
+      cursor:pointer;
+      font-size:12px;
+      box-shadow: 0 8px 22px rgba(0,0,0,.22);
+      transition: transform .08s ease, border-color .12s ease;
+      user-select:none;
+    }
+    .btn:hover{transform: translateY(-1px); border-color: rgba(110,231,255,.35)}
+    .btn:active{transform: translateY(0px)}
+    .btn.ghost{background: transparent}
+    .btn.danger{border-color: rgba(251,113,133,.45)}
+    .btn.good{border-color: rgba(52,211,153,.45)}
+    .btn.small{padding:7px 10px;border-radius:10px}
+    main{
+      padding: 10px 18px 22px;
+      display:grid;
+      grid-template-columns: 1.1fr .9fr;
+      gap:16px;
+    }
+    @media (max-width: 1100px){
+      main{grid-template-columns: 1fr}
+    }
+    .panel{
+      background: linear-gradient(180deg, rgba(15,26,47,.86), rgba(12,22,42,.86));
+      border:1px solid rgba(32,54,95,.95);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .panel .head{
+      padding:14px 14px 10px;
+      border-bottom:1px solid rgba(32,54,95,.8);
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .panel .head h2{
+      margin:0;
+      font-size:13px;
+      letter-spacing:.25px;
+    }
+    .panel .head .hint{
+      margin:3px 0 0;
+      color:var(--muted);
+      font-size:12px;
+      max-width:680px;
+    }
+    .content{padding:14px}
+    .grid2{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:12px;
+    }
+    @media (max-width: 780px){ .grid2{grid-template-columns:1fr} }
+    label{display:block;font-size:12px;color:var(--muted); margin-bottom:6px}
+    input, select, textarea{
+      width:100%;
+      padding:10px 10px;
+      border-radius:12px;
+      background: rgba(9,16,30,.75);
+      border:1px solid rgba(32,54,95,.9);
+      color:var(--text);
+      outline:none;
+      font-size:12px;
+    }
+    textarea{min-height:86px;resize:vertical}
+    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+    .row > *{flex:1}
+    .chips{display:flex;flex-wrap:wrap;gap:8px}
+    .chip{
+      background: rgba(19,36,69,.7);
+      border:1px solid rgba(32,54,95,.9);
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:12px;
+      color:var(--muted);
+    }
+    .chip strong{color:var(--text)}
+    .tag{
+      padding:2px 8px;
+      border-radius:999px;
+      font-size:11px;
+      border:1px solid rgba(32,54,95,.9);
+      background: rgba(19,36,69,.45);
+      color:var(--muted);
+    }
+    .tag.good{border-color: rgba(52,211,153,.4); color: rgba(179,255,221,.95)}
+    .tag.warn{border-color: rgba(251,191,36,.4); color: rgba(255,238,186,.95)}
+    .tag.bad{border-color: rgba(251,113,133,.5); color: rgba(255,200,210,.95)}
+    .list{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+    .card{
+      padding:12px;
+      border-radius:14px;
+      background: rgba(11,18,32,.35);
+      border:1px solid rgba(32,54,95,.85);
+    }
+    .card .top{
+      display:flex; gap:10px; justify-content:space-between; align-items:flex-start; flex-wrap:wrap;
+    }
+    .card .title{
+      font-weight:700;
+      font-size:13px;
+      margin:0;
+    }
+    .card .meta{
+      margin-top:6px;
+      font-size:12px;
+      color:var(--muted);
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    .mono{font-family:var(--mono)}
+    .muted{color:var(--muted)}
+    .divider{height:1px;background:rgba(32,54,95,.7);margin:12px 0}
+    .note{
+      background: rgba(9,16,30,.75);
+      border:1px dashed rgba(110,231,255,.35);
+      padding:12px;
+      border-radius:14px;
+      min-height: 220px;
+      white-space: pre-wrap;
+      font-family: var(--mono);
+      font-size:12px;
+      color:#dfe9ff;
+    }
+    .kbd{
+      font-family: var(--mono);
+      font-size:11px;
+      padding:2px 6px;
+      border-radius:8px;
+      border:1px solid rgba(32,54,95,.95);
+      background: rgba(19,36,69,.5);
+      color:var(--muted);
+    }
+    .footer{
+      padding: 0 18px 18px;
+      color: var(--muted);
+      font-size:12px;
+    }
+    .small{font-size:12px}
+    .rightActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .scoreBox{
+      display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+      padding:10px 12px;
+      border-radius:14px;
+      background: rgba(9,16,30,.55);
+      border:1px solid rgba(32,54,95,.9);
+    }
+    .score{
+      font-weight:900;
+      font-size:18px;
+      letter-spacing:.5px;
+    }
+    .score.good{color: var(--good)}
+    .score.warn{color: var(--warn)}
+    .score.bad{color: var(--bad)}
+    .mini{
+      font-size:11px;
+      color:var(--muted);
+    }
+    .tabs{
+      display:flex; gap:8px; flex-wrap:wrap;
+      padding:10px 14px;
+      border-bottom:1px solid rgba(32,54,95,.8);
+      background: rgba(10,16,30,.35);
+    }
+    .tab{
+      padding:8px 10px;
+      border-radius:12px;
+      border:1px solid rgba(32,54,95,.85);
+      background: rgba(19,36,69,.35);
+      color: var(--muted);
+      cursor:pointer;
+      font-size:12px;
+      user-select:none;
+    }
+    .tab.active{
+      color: var(--text);
+      border-color: rgba(110,231,255,.35);
+      background: rgba(19,36,69,.65);
+    }
+    .hidden{display:none}
+    .warnBox{
+      padding:10px 12px;
+      border-radius:14px;
+      border:1px solid rgba(251,191,36,.35);
+      background: rgba(251,191,36,.08);
+      color: rgba(255,238,186,.95);
+      font-size:12px;
+    }
+    .okBox{
+      padding:10px 12px;
+      border-radius:14px;
+      border:1px solid rgba(52,211,153,.35);
+      background: rgba(52,211,153,.08);
+      color: rgba(179,255,221,.95);
+      font-size:12px;
+    }
+    .dangerBox{
+      padding:10px 12px;
+      border-radius:14px;
+      border:1px solid rgba(251,113,133,.35);
+      background: rgba(251,113,133,.08);
+      color: rgba(255,200,210,.95);
+      font-size:12px;
+    }
+    .inline{
+      display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+    }
+    .inline .btn{flex:0 0 auto}
+  </style>
+</head>
+<body>
+<header>
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo">CD</div>
+      <div>
+        <h1>Catalyst Desk — Daily Routine</h1>
+        <div class="sub">Single-file workflow: Calendar → Catalyst scoring → Desk note → Trade/Watch triggers. (Manual inputs; no live data fetch.)</div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="pill"><span>Local time:</span> <strong id="localTime">—</strong> <span class="kbd">Asia/Jerusalem</span></div>
+      <div class="pill"><span>Fees:</span> <strong>$8 / order</strong> <span class="muted">• Tax:</span> <strong>25%</strong></div>
+      <button class="btn ghost small" id="exportBtn">Export JSON</button>
+      <button class="btn ghost small" id="importBtn">Import JSON</button>
+      <button class="btn danger small" id="resetBtn">Reset</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- LEFT: Calendar + Catalysts -->
+  <section class="panel">
+    <div class="tabs">
+      <div class="tab active" data-tab="calendar">Catalyst Calendar</div>
+      <div class="tab" data-tab="catalysts">Catalyst Scoring</div>
+      <div class="tab" data-tab="tradecard">Trade Card</div>
+    </div>
+
+    <!-- CALENDAR TAB -->
+    <div id="tab-calendar">
+      <div class="head">
+        <div>
+          <h2>Forward Catalyst Calendar (next 10 trading days)</h2>
+          <div class="hint">Add scheduled events (macro, earnings, policy, deadlines). The routine generator uses this list to produce a “desk note”.</div>
+        </div>
+        <div class="rightActions">
+          <button class="btn small" id="addSampleBtn">Add sample items</button>
+          <button class="btn small" id="clearEventsBtn">Clear calendar</button>
+        </div>
+      </div>
+      <div class="content">
+        <div class="grid2">
+          <div class="card">
+            <div class="title">Add calendar item</div>
+            <div class="divider"></div>
+            <div class="grid2">
+              <div>
+                <label>Date</label>
+                <input id="evDate" type="date" />
+              </div>
+              <div>
+                <label>Time (optional)</label>
+                <input id="evTime" type="time" />
+              </div>
+            </div>
+            <div class="grid2" style="margin-top:10px">
+              <div>
+                <label>Type</label>
+                <select id="evType">
+                  <option>Macro</option>
+                  <option>Earnings</option>
+                  <option>Policy/Regulation</option>
+                  <option>Geopolitics</option>
+                  <option>Natural Disaster/Weather</option>
+                  <option>Other</option>
+                </select>
+              </div>
+              <div>
+                <label>Region</label>
+                <select id="evRegion">
+                  <option>US</option>
+                  <option>EU</option>
+                  <option>Israel</option>
+                  <option>China</option>
+                  <option>Global</option>
+                  <option>Other</option>
+                </select>
+              </div>
+            </div>
+            <div style="margin-top:10px">
+              <label>Title</label>
+              <input id="evTitle" placeholder="e.g., US CPI (Dec), TSMC earnings, EU vote on..." />
+            </div>
+            <div style="margin-top:10px">
+              <label>Why it matters (1–2 lines)</label>
+              <textarea id="evWhy" placeholder="What could surprise? Who gets impacted? Why in weeks (not years)?"></textarea>
+            </div>
+            <div class="row">
+              <button class="btn good" id="saveEventBtn">Add to calendar</button>
+              <div class="chips">
+                <span class="chip">Tip: keep it <strong>time-bounded</strong></span>
+                <span class="chip">Add “time” if known</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="title">Calendar list</div>
+            <div class="divider"></div>
+            <div class="warnBox">
+              This app doesn’t fetch live calendars/news. You paste what you care about. The strength comes from repeatable structure + triggers.
+            </div>
+            <div class="divider"></div>
+            <div class="list" id="eventsList"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CATALYSTS TAB -->
+    <div id="tab-catalysts" class="hidden">
+      <div class="head">
+        <div>
+          <h2>Catalyst Quality Score (only trade ≥ 7/10)</h2>
+          <div class="hint">Score your best candidates. The system should default to <strong>NO TRADE</strong> unless there’s a clear, time-bounded edge.</div>
+        </div>
+        <div class="rightActions">
+          <button class="btn small" id="clearCatalystsBtn">Clear scored list</button>
+        </div>
+      </div>
+      <div class="content">
+        <div class="grid2">
+          <div class="card">
+            <div class="title">Add scored catalyst</div>
+            <div class="divider"></div>
+
+            <label>Catalyst name</label>
+            <input id="catName" placeholder="e.g., US Jobs (Jan 9) + TSMC earnings read-through" />
+
+            <div class="grid2" style="margin-top:10px">
+              <div>
+                <label>Primary instrument (ETF/stock)</label>
+                <input id="catInstrument" placeholder="e.g., SMH / ITA / CIBR / XLE / NVDA" />
+              </div>
+              <div>
+                <label>Catalyst window (dates)</label>
+                <input id="catWindow" placeholder="e.g., Jan 9–Jan 15" />
+              </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="grid2">
+              <div>
+                <label>Timing clarity (0–2)</label>
+                <select id="sTiming">
+                  <option value="0">0</option>
+                  <option value="1">1</option>
+                  <option value="2" selected>2</option>
+                </select>
+              </div>
+              <div>
+                <label>Surprise potential (0–2)</label>
+                <select id="sSurprise">
+                  <option value="0">0</option>
+                  <option value="1" selected>1</option>
+                  <option value="2">2</option>
+                </select>
+              </div>
+              <div>
+                <label>Tradability (0–2)</label>
+                <select id="sTradable">
+                  <option value="0">0</option>
+                  <option value="1">1</option>
+                  <option value="2" selected>2</option>
+                </select>
+              </div>
+              <div>
+                <label>Follow-through (0–2)</label>
+                <select id="sFollow">
+                  <option value="0">0</option>
+                  <option value="1" selected>1</option>
+                  <option value="2">2</option>
+                </select>
+              </div>
+              <div>
+                <label>Risk containment (0–2)</label>
+                <select id="sRisk">
+                  <option value="0">0</option>
+                  <option value="1" selected>1</option>
+                  <option value="2">2</option>
+                </select>
+              </div>
+              <div class="scoreBox">
+                <div>
+                  <div class="mini">Total score</div>
+                  <div id="scoreVal" class="score warn">7</div>
+                </div>
+                <div class="mini">Trade threshold: <span class="kbd">≥ 7</span></div>
+              </div>
+            </div>
+
+            <div style="margin-top:10px">
+              <label>One-line thesis</label>
+              <textarea id="catThesis" placeholder="What moves price in the next weeks? What would surprise?"></textarea>
+            </div>
+
+            <div class="grid2" style="margin-top:10px">
+              <div>
+                <label>Activation trigger (“headline or price behavior”)</label>
+                <textarea id="catTrigger" placeholder="e.g., ‘Policy vote passes’ OR ‘post-print dip + stabilization above X’"></textarea>
+              </div>
+              <div>
+                <label>Invalidation (“what breaks it”)</label>
+                <textarea id="catInvalid" placeholder="e.g., ‘yields spike >X’ OR ‘breaks below Y and fails to reclaim’"></textarea>
+              </div>
+            </div>
+
+            <div class="row">
+              <button class="btn good" id="saveCatalystBtn">Add scored catalyst</button>
+              <span class="chip">Default stance: <strong>NO TRADE</strong></span>
+              <span class="chip">No chasing gaps</span>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="title">Scored candidates</div>
+            <div class="divider"></div>
+            <div class="list" id="catalystsList"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TRADE CARD TAB -->
+    <div id="tab-tradecard" class="hidden">
+      <div class="head">
+        <div>
+          <h2>Trade Card Builder (limit-only + OCO + time stop)</h2>
+          <div class="hint">Build one mechanical plan. Calculates net outcomes after $8/order fees and 25% tax on gains.</div>
+        </div>
+      </div>
+      <div class="content">
+        <div class="grid2">
+          <div class="card">
+            <div class="title">Plan inputs</div>
+            <div class="divider"></div>
+
+            <div class="grid2">
+              <div>
+                <label>Instrument</label>
+                <input id="tSymbol" placeholder="e.g., SMH" />
+              </div>
+              <div>
+                <label>Type</label>
+                <select id="tType">
+                  <option value="ETF" selected>ETF</option>
+                  <option value="Stock">Stock</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="grid2" style="margin-top:10px">
+              <div>
+                <label>Entry price (limit)</label>
+                <input id="tEntry" type="number" step="0.01" placeholder="e.g., 382.00" />
+              </div>
+              <div>
+                <label>Shares</label>
+                <input id="tShares" type="number" step="1" placeholder="e.g., 5" />
+              </div>
+            </div>
+
+            <div class="grid2" style="margin-top:10px">
+              <div>
+                <label>Take-profit %</label>
+                <input id="tTPpct" type="number" step="0.1" placeholder="ETF default 15" />
+              </div>
+              <div>
+                <label>Stop-loss %</label>
+                <input id="tSLpct" type="number" step="0.1" placeholder="ETF default 8" />
+              </div>
+            </div>
+
+            <div class="grid2" style="margin-top:10px">
+              <div>
+                <label>Fill date</label>
+                <input id="tFillDate" type="date" />
+              </div>
+              <div>
+                <label>Time stop (trading days)</label>
+                <input id="tDays" type="number" step="1" placeholder="ETF 20 / Stock 15" />
+              </div>
+            </div>
+
+            <div style="margin-top:10px">
+              <label>Catalyst + window</label>
+              <textarea id="tCatalyst" placeholder="e.g., Jobs print + TSMC earnings (Jan 9–15)"></textarea>
+            </div>
+
+            <div class="row">
+              <button class="btn good" id="calcTradeBtn">Calculate & save card</button>
+              <button class="btn ghost" id="useDefaultsBtn">Use defaults</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="title">Output (copy-ready)</div>
+            <div class="divider"></div>
+            <div class="note" id="tradeOut">Fill the inputs → “Calculate & save card”.</div>
+            <div class="divider"></div>
+            <div class="inline">
+              <button class="btn small" id="copyTradeBtn">Copy</button>
+              <button class="btn small" id="setActiveBtn">Set as ACTIVE trade</button>
+              <span class="muted small">Active trade is used in EOD routine.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- RIGHT: Routine generator -->
+  <section class="panel">
+    <div class="head">
+      <div>
+        <h2>Daily Routine Generator</h2>
+        <div class="hint">Click a routine → it produces a desk note. Copy/paste into your journal or chat with your trading assistant.</div>
+      </div>
+      <div class="rightActions">
+        <button class="btn small" id="copyNoteBtn">Copy note</button>
+        <button class="btn small" id="clearNoteBtn">Clear</button>
+      </div>
+    </div>
+    <div class="content">
+      <div class="chips" style="margin-bottom:10px">
+        <span class="chip"><strong>Default:</strong> NO TRADE</span>
+        <span class="chip"><strong>Trade only if</strong> catalyst score ≥ 7</span>
+        <span class="chip">Limit-only + OCO + time stop</span>
+      </div>
+
+      <div class="grid2">
+        <div class="card">
+          <div class="title">Routines (Israel time)</div>
+          <div class="divider"></div>
+          <div class="list">
+            <button class="btn" id="morningBtn">1) Morning Scan (08:00–10:00)</button>
+            <button class="btn" id="preopenBtn">2) Pre–US Open Plan (15:50–16:25)</button>
+            <button class="btn" id="eventBtn">3) Event Playbook (post-release)</button>
+            <button class="btn" id="eodBtn">4) End-of-Day Debrief (22:30–23:10)</button>
+            <button class="btn" id="weeklyBtn">Weekly Reset (pipeline 2–4 weeks)</button>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="card" style="background: rgba(9,16,30,.55)">
+            <div class="title">Event playbook inputs</div>
+            <div class="divider"></div>
+            <label>Which event are we reacting to?</label>
+            <select id="reactEvent"></select>
+            <div class="grid2" style="margin-top:10px">
+              <div>
+                <label>Price low (after spike)</label>
+                <input id="reactLow" type="number" step="0.01" placeholder="e.g., 374.20" />
+              </div>
+              <div>
+                <label>Current price</label>
+                <input id="reactNow" type="number" step="0.01" placeholder="e.g., 377.90" />
+              </div>
+            </div>
+            <div style="margin-top:10px" class="grid2">
+              <div>
+                <label>Stabilization checks</label>
+                <div class="chips">
+                  <span class="chip"><input type="checkbox" id="chkNoNewLow" /> No new low (20–30m)</span>
+                  <span class="chip"><input type="checkbox" id="chkBounceHold" /> Bounce & hold</span>
+                  <span class="chip"><input type="checkbox" id="chkHigherLow" /> Higher low</span>
+                </div>
+              </div>
+              <div>
+                <label>Notes (headline numbers)</label>
+                <textarea id="reactNotes" placeholder="e.g., NFP, wages, revisions; yields reaction"></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="title">Desk note</div>
+          <div class="divider"></div>
+          <div class="note" id="deskNote">Tip: add events + scored catalysts first, then generate a routine note.</div>
+          <div class="divider"></div>
+          <div class="chips">
+            <span class="chip">Copy with <span class="kbd">Copy note</span></span>
+            <span class="chip">Everything saved in <strong>localStorage</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="card">
+        <div class="title">Active trade (optional)</div>
+        <div class="divider"></div>
+        <div id="activeTradeBox" class="muted">No active trade set.</div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="footer">
+  <div class="muted">
+    This is a structure tool, not a broker or a data terminal. You supply the headlines, calendar items, and prices. The routine helps you stay mechanical: <strong>plan → trigger → execute → review</strong>.
+  </div>
+</div>
+
+<script>
+  // ---------- Storage ----------
+  const STORE_KEY = "catalyst_desk_v1";
+  const defaultState = {
+    events: [],
+    catalysts: [],
+    tradeCards: [],
+    activeTrade: null
+  };
+  let state = loadState();
+
+  function loadState(){
+    try{
+      const raw = localStorage.getItem(STORE_KEY);
+      if(!raw) return structuredClone(defaultState);
+      const obj = JSON.parse(raw);
+      return { ...structuredClone(defaultState), ...obj };
+    }catch(e){
+      return structuredClone(defaultState);
+    }
+  }
+  function saveState(){
+    localStorage.setItem(STORE_KEY, JSON.stringify(state));
+    renderAll();
+  }
+
+  // ---------- Time (Asia/Jerusalem) ----------
+  function tickTime(){
+    try{
+      const now = new Date();
+      const fmt = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Jerusalem",
+        weekday:"short", year:"numeric", month:"short", day:"2-digit",
+        hour:"2-digit", minute:"2-digit", second:"2-digit"
+      });
+      document.getElementById("localTime").textContent = fmt.format(now);
+    }catch(e){
+      document.getElementById("localTime").textContent = new Date().toLocaleString();
+    }
+  }
+  setInterval(tickTime, 1000); tickTime();
+
+  // ---------- Tabs ----------
+  document.querySelectorAll(".tab").forEach(t=>{
+    t.addEventListener("click", ()=>{
+      document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+      t.classList.add("active");
+      const tab = t.dataset.tab;
+      ["calendar","catalysts","tradecard"].forEach(name=>{
+        document.getElementById("tab-"+name).classList.toggle("hidden", name!==tab);
+      });
+    });
+  });
+
+  // ---------- Helpers ----------
+  const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36);
+  function safeNum(x, fallback=0){
+    const n = Number(x);
+    return Number.isFinite(n) ? n : fallback;
+  }
+  function fmtMoney(n){
+    if(!Number.isFinite(n)) return "—";
+    const sign = n>0 ? "+" : "";
+    return sign + "$" + n.toFixed(2);
+  }
+  function fmtDateTimeISO(dateStr, timeStr){
+    if(!dateStr) return null;
+    if(timeStr) return dateStr + "T" + timeStr;
+    return dateStr + "T00:00";
+  }
+  function byDateAsc(a,b){
+    return new Date(a.dt) - new Date(b.dt);
+  }
+  function isWeekend(d){
+    const day = d.getDay(); // 0 Sun, 6 Sat
+    return day === 0 || day === 6;
+  }
+  function addTradingDays(startDate, tradingDays){
+    // simple weekend-skipping logic
+    const d = new Date(startDate);
+    let added = 0;
+    while(added < tradingDays){
+      d.setDate(d.getDate()+1);
+      if(!isWeekend(d)) added++;
+    }
+    return d;
+  }
+
+  // ---------- Calendar Events ----------
+  const evDate = document.getElementById("evDate");
+  const evTime = document.getElementById("evTime");
+  const evType = document.getElementById("evType");
+  const evRegion = document.getElementById("evRegion");
+  const evTitle = document.getElementById("evTitle");
+  const evWhy = document.getElementById("evWhy");
+  document.getElementById("saveEventBtn").addEventListener("click", ()=>{
+    const dateStr = evDate.value;
+    const timeStr = evTime.value || "";
+    const title = evTitle.value.trim();
+    if(!dateStr || !title){
+      alert("Please provide at least Date + Title.");
+      return;
+    }
+    const dt = fmtDateTimeISO(dateStr, timeStr);
+    state.events.push({
+      id: uid(),
+      dt,
+      dateStr,
+      timeStr,
+      type: evType.value,
+      region: evRegion.value,
+      title,
+      why: evWhy.value.trim()
+    });
+    evTitle.value = "";
+    evWhy.value = "";
+    saveState();
+  });
+
+  document.getElementById("clearEventsBtn").addEventListener("click", ()=>{
+    if(confirm("Clear all calendar items?")){
+      state.events = [];
+      saveState();
+    }
+  });
+
+  document.getElementById("addSampleBtn").addEventListener("click", ()=>{
+    const today = new Date();
+    const toDate = (d)=> d.toISOString().slice(0,10);
+    const d1 = new Date(today); d1.setDate(d1.getDate()+1);
+    const d2 = new Date(today); d2.setDate(d2.getDate()+5);
+    state.events.push(
+      {
+        id: uid(),
+        dt: fmtDateTimeISO(toDate(d1), "15:30"),
+        dateStr: toDate(d1),
+        timeStr: "15:30",
+        type: "Macro",
+        region: "US",
+        title: "Example: US Jobs Report (BLS)",
+        why: "Binary rates/yields shock; can dominate risk assets. Prefer post-release dip+stabilization entry."
+      },
+      {
+        id: uid(),
+        dt: fmtDateTimeISO(toDate(d2), "14:00"),
+        dateStr: toDate(d2),
+        timeStr: "14:00",
+        type: "Earnings",
+        region: "Global",
+        title: "Example: Bellwether earnings (sector leader)",
+        why: "Guidance + commentary can drive 1–2 week sector rotation. Watch read-through ETFs."
+      }
+    );
+    saveState();
+  });
+
+  function renderEvents(){
+    const box = document.getElementById("eventsList");
+    const items = [...state.events].sort(byDateAsc);
+    box.innerHTML = "";
+    if(items.length === 0){
+      box.innerHTML = `<div class="muted small">No items yet. Add a few time-bounded catalysts above.</div>`;
+      return;
+    }
+    items.forEach(ev=>{
+      const dt = new Date(ev.dt);
+      const dateLabel = ev.dateStr + (ev.timeStr ? " " + ev.timeStr : "");
+      const tag = `<span class="tag">${ev.type}</span> <span class="tag">${ev.region}</span>`;
+      const div = document.createElement("div");
+      div.className = "card";
+      div.innerHTML = `
+        <div class="top">
+          <div>
+            <div class="title">${escapeHtml(ev.title)}</div>
+            <div class="meta">
+              <span class="mono">${escapeHtml(dateLabel)}</span>
+              ${tag}
+            </div>
+          </div>
+          <button class="btn small danger" data-del="${ev.id}">Delete</button>
+        </div>
+        ${ev.why ? `<div class="divider"></div><div class="muted small">${escapeHtml(ev.why)}</div>` : ``}
+      `;
+      div.querySelector("[data-del]").addEventListener("click", ()=>{
+        state.events = state.events.filter(x=>x.id !== ev.id);
+        saveState();
+      });
+      box.appendChild(div);
+    });
+  }
+
+  // ---------- Catalyst Scoring ----------
+  const scoreEls = ["sTiming","sSurprise","sTradable","sFollow","sRisk"].map(id=>document.getElementById(id));
+  scoreEls.forEach(el=>el.addEventListener("change", updateScorePreview));
+  updateScorePreview();
+
+  function calcScore(vals){
+    return vals.reduce((a,b)=>a+safeNum(b,0),0);
+  }
+  function scoreClass(score){
+    if(score >= 7) return "good";
+    if(score >= 5) return "warn";
+    return "bad";
+  }
+  function updateScorePreview(){
+    const score = calcScore(scoreEls.map(el=>el.value));
+    const s = document.getElementById("scoreVal");
+    s.textContent = String(score);
+    s.className = "score " + scoreClass(score);
+  }
+
+  document.getElementById("saveCatalystBtn").addEventListener("click", ()=>{
+    const name = document.getElementById("catName").value.trim();
+    const instrument = document.getElementById("catInstrument").value.trim();
+    const windowStr = document.getElementById("catWindow").value.trim();
+    if(!name || !instrument){
+      alert("Please provide at least: Catalyst name + Primary instrument.");
+      return;
+    }
+    const parts = {
+      timing: safeNum(document.getElementById("sTiming").value),
+      surprise: safeNum(document.getElementById("sSurprise").value),
+      tradable: safeNum(document.getElementById("sTradable").value),
+      follow: safeNum(document.getElementById("sFollow").value),
+      risk: safeNum(document.getElementById("sRisk").value),
+    };
+    const score = calcScore(Object.values(parts));
+    state.catalysts.push({
+      id: uid(),
+      name,
+      instrument,
+      window: windowStr,
+      score,
+      parts,
+      thesis: document.getElementById("catThesis").value.trim(),
+      trigger: document.getElementById("catTrigger").value.trim(),
+      invalid: document.getElementById("catInvalid").value.trim(),
+      createdAt: new Date().toISOString()
+    });
+    // clear inputs lightly
+    document.getElementById("catName").value = "";
+    document.getElementById("catInstrument").value = "";
+    document.getElementById("catWindow").value = "";
+    document.getElementById("catThesis").value = "";
+    document.getElementById("catTrigger").value = "";
+    document.getElementById("catInvalid").value = "";
+    saveState();
+  });
+
+  document.getElementById("clearCatalystsBtn").addEventListener("click", ()=>{
+    if(confirm("Clear all scored catalysts?")){
+      state.catalysts = [];
+      saveState();
+    }
+  });
+
+  function renderCatalysts(){
+    const box = document.getElementById("catalystsList");
+    const items = [...state.catalysts].sort((a,b)=>b.score - a.score);
+    box.innerHTML = "";
+    if(items.length === 0){
+      box.innerHTML = `<div class="muted small">No scored catalysts yet. Add 1–3 candidates you actually want to monitor.</div>`;
+      return;
+    }
+    items.forEach(c=>{
+      const tagClass = c.score >= 7 ? "good" : (c.score >= 5 ? "warn" : "bad");
+      const div = document.createElement("div");
+      div.className = "card";
+      div.innerHTML = `
+        <div class="top">
+          <div>
+            <div class="title">${escapeHtml(c.name)}</div>
+            <div class="meta">
+              <span class="tag ${tagClass}">Score ${c.score}/10</span>
+              <span class="tag">${escapeHtml(c.instrument)}</span>
+              ${c.window ? `<span class="tag">${escapeHtml(c.window)}</span>` : ``}
+            </div>
+          </div>
+          <button class="btn small danger" data-del="${c.id}">Delete</button>
+        </div>
+        ${c.thesis ? `<div class="divider"></div><div class="muted small"><strong>Thesis:</strong> ${escapeHtml(c.thesis)}</div>` : ``}
+        ${(c.trigger || c.invalid) ? `<div class="divider"></div>
+          <div class="muted small">${c.trigger ? `<strong>Trigger:</strong> ${escapeHtml(c.trigger)}<br>` : ``}
+          ${c.invalid ? `<strong>Invalid:</strong> ${escapeHtml(c.invalid)}` : ``}
+          </div>` : ``}
+      `;
+      div.querySelector("[data-del]").addEventListener("click", ()=>{
+        state.catalysts = state.catalysts.filter(x=>x.id !== c.id);
+        saveState();
+      });
+      box.appendChild(div);
+    });
+  }
+
+  // ---------- Trade Card Builder ----------
+  const feePerOrder = 8;
+  const taxRate = 0.25;
+
+  function useDefaults(){
+    const typ = document.getElementById("tType").value;
+    if(typ === "ETF"){
+      document.getElementById("tTPpct").value = 15;
+      document.getElementById("tSLpct").value = 8;
+      document.getElementById("tDays").value = 20;
+    }else{
+      document.getElementById("tTPpct").value = 22;
+      document.getElementById("tSLpct").value = 10;
+      document.getElementById("tDays").value = 15;
+    }
+  }
+  document.getElementById("useDefaultsBtn").addEventListener("click", useDefaults);
+  document.getElementById("tType").addEventListener("change", useDefaults);
+
+  function buildTradeCard(){
+    const sym = document.getElementById("tSymbol").value.trim().toUpperCase();
+    const typ = document.getElementById("tType").value;
+    const entry = safeNum(document.getElementById("tEntry").value, NaN);
+    const shares = Math.floor(safeNum(document.getElementById("tShares").value, NaN));
+    let tpPct = safeNum(document.getElementById("tTPpct").value, NaN);
+    let slPct = safeNum(document.getElementById("tSLpct").value, NaN);
+    const fillDateStr = document.getElementById("tFillDate").value;
+    const tDays = Math.floor(safeNum(document.getElementById("tDays").value, NaN));
+    const catalyst = document.getElementById("tCatalyst").value.trim();
+
+    if(!sym || !Number.isFinite(entry) || !Number.isFinite(shares) || shares<=0){
+      alert("Please provide Instrument, Entry price, Shares.");
+      return null;
+    }
+    if(!Number.isFinite(tpPct)) tpPct = (typ==="ETF"?15:22);
+    if(!Number.isFinite(slPct)) slPct = (typ==="ETF"?8:10);
+
+    const tpPrice = entry * (1 + tpPct/100);
+    const slPrice = entry * (1 - slPct/100);
+
+    const notional = entry * shares;
+
+    // Fees: entry fills ($8) + one exit fills ($8) => $16 total if the trade completes
+    const totalFees = feePerOrder * 2;
+
+    // Profit scenario (TP)
+    const grossProfit = (tpPrice - entry) * shares;
+    const taxableGain = Math.max(0, grossProfit - totalFees);
+    const tax = taxableGain * taxRate;
+    const netProfit = grossProfit - totalFees - tax;
+
+    // Loss scenario (SL)
+    const grossLoss = (entry - slPrice) * shares;
+    const netLoss = grossLoss + totalFees;
+
+    // Time stop date (optional)
+    let timeStopLine = "Time stop: set after fill (15–20 trading days).";
+    if(fillDateStr && Number.isFinite(tDays) && tDays>0){
+      const d = addTradingDays(new Date(fillDateStr+"T00:00"), tDays);
+      const iso = d.toISOString().slice(0,10);
+      timeStopLine = `Time stop: exit by ${iso} (≈ ${tDays} trading days after fill).`;
+    }
+
+    const ocoTP = typ==="ETF" ? "+15%" : "+20–25%";
+    const ocoSL = typ==="ETF" ? "−8%" : "−10%";
+
+    const cardText =
+`TRADE CARD — ${sym} (${typ})
+Catalyst/window: ${catalyst || "—"}
+Entry (LIMIT): BUY ${shares} ${sym} @ $${entry.toFixed(2)}  (notional ≈ $${notional.toFixed(2)})
+
+OCO exits (place immediately after fill):
+- Take-profit (LIMIT): SELL ${shares} @ $${tpPrice.toFixed(2)}  (${ocoTP})
+- Stop-loss (STOP-LIMIT): SELL ${shares} STOP $${slPrice.toFixed(2)} / LIMIT $${(slPrice-0.10).toFixed(2)}  (${ocoSL})
+
+${timeStopLine}
+Mid-trade rules:
+- Day 5–7: if +4–8%, move stop to break-even or −3% (optionally reduce TP to +12–15% for ETFs)
+- Day ~10 (⅔ timebox): add trailing stop (ETF 5–6%, Stock 7–8%)
+
+Risk math (assumptions: $8/order, 25% tax on gains):
+- If TP hits: gross +$${grossProfit.toFixed(2)} → net ${fmtMoney(netProfit)}
+- If SL hits: net −$${netLoss.toFixed(2)} (fees included)
+
+Non-negotiables: no averaging down, no stop removal, one trade at a time.`;
+
+    const card = {
+      id: uid(),
+      sym, typ, entry, shares, tpPct, slPct, tpPrice, slPrice,
+      fillDateStr, tDays,
+      catalyst,
+      createdAt: new Date().toISOString(),
+      text: cardText
+    };
+    return card;
+  }
+
+  document.getElementById("calcTradeBtn").addEventListener("click", ()=>{
+    const card = buildTradeCard();
+    if(!card) return;
+    state.tradeCards.unshift(card);
+    document.getElementById("tradeOut").textContent = card.text;
+    saveState();
+  });
+
+  document.getElementById("copyTradeBtn").addEventListener("click", ()=>{
+    copyText(document.getElementById("tradeOut").textContent);
+  });
+
+  document.getElementById("setActiveBtn").addEventListener("click", ()=>{
+    const txt = document.getElementById("tradeOut").textContent.trim();
+    if(!txt || txt.startsWith("Fill the inputs")){ alert("Create a trade card first."); return; }
+    // set last trade card as active
+    const latest = state.tradeCards[0];
+    if(!latest){ alert("No saved trade card found."); return; }
+    state.activeTrade = latest;
+    saveState();
+  });
+
+  function renderActiveTrade(){
+    const box = document.getElementById("activeTradeBox");
+    if(!state.activeTrade){
+      box.innerHTML = `<span class="muted">No active trade set.</span>`;
+      return;
+    }
+    const t = state.activeTrade;
+    box.innerHTML = `
+      <div class="okBox">
+        <strong>ACTIVE:</strong> <span class="mono">${escapeHtml(t.sym)}</span> (${escapeHtml(t.typ)}) — Entry $${t.entry.toFixed(2)} × ${t.shares} shares
+        <div class="small muted" style="margin-top:6px">${escapeHtml(t.catalyst || "—")}</div>
+      </div>
+      <div class="divider"></div>
+      <button class="btn small danger" id="clearActiveBtn">Clear active trade</button>
+    `;
+    document.getElementById("clearActiveBtn").addEventListener("click", ()=>{
+      state.activeTrade = null;
+      saveState();
+    });
+  }
+
+  // ---------- Routine Generator ----------
+  function topCatalysts(){
+    return [...state.catalysts].sort((a,b)=>b.score-a.score).slice(0,5);
+  }
+  function eventsNext10TradingDays(){
+    // include events whose date is within next 14 calendar days (rough proxy) and not in the past
+    const now = new Date();
+    const max = new Date(); max.setDate(max.getDate()+14);
+    return [...state.events]
+      .filter(e=>{
+        const d = new Date(e.dt);
+        return d >= new Date(now.toDateString()) && d <= max;
+      })
+      .sort(byDateAsc);
+  }
+  function eventsToday(){
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0,10);
+    return [...state.events].filter(e=>e.dateStr === todayStr).sort(byDateAsc);
+  }
+
+  function decideTrade(){
+    const best = topCatalysts()[0];
+    if(!best) return { decision:"NO TRADE", reason:"No scored catalysts yet." };
+    if(best.score >= 7) return { decision:"WATCH/PLAN (trigger-based)", reason:`Top catalyst scores ${best.score}/10 — plan triggers; avoid chasing.` };
+    return { decision:"NO TRADE", reason:`Top catalyst only ${best.score}/10 (<7). Stay flat; watch triggers.` };
+  }
+
+  function formatEventLine(e){
+    const time = e.timeStr ? ` ${e.timeStr}` : "";
+    return `- ${e.dateStr}${time} • ${e.type}/${e.region}: ${e.title}${e.why ? ` — ${e.why}` : ""}`;
+  }
+
+  function formatCatalystLine(c){
+    return `- [${c.score}/10] ${c.name} → ${c.instrument}${c.window ? ` (${c.window})` : ""}\n  Trigger: ${c.trigger || "—"}\n  Invalid: ${c.invalid || "—"}`;
+  }
+
+  function morningScanNote(){
+    const now = new Date();
+    const iso = now.toISOString().slice(0,10);
+    const today = eventsToday();
+    const upcoming = eventsNext10TradingDays();
+    const cats = topCatalysts();
+    const dec = decideTrade();
+
+    return `MORNING SCAN — ${iso} (Asia/Jerusalem)
+State: ${state.activeTrade ? "ACTIVE TRADE ON" : "NO POSITION"} • Default stance: NO TRADE unless score ≥7
+
+TODAY’S CATALYSTS:
+${today.length ? today.map(formatEventLine).join("\n") : "- None logged for today."}
+
+NEXT WINDOW (≈10 trading days):
+${upcoming.length ? upcoming.slice(0,10).map(formatEventLine).join("\n") : "- Add key macro/earnings/policy dates you care about."}
+
+RANKED CATALYSTS (top):
+${cats.length ? cats.map(formatCatalystLine).join("\n\n") : "- None scored yet. Score 1–3 real candidates."}
+
+DECISION: ${dec.decision}
+Reason: ${dec.reason}
+
+FOCUS TODAY:
+- Maintain anti-chase discipline (limit-only).
+- If a major print is pending: prefer post-release dip + stabilization entries.
+Next check-in: Pre–US open plan (15:50–16:25).`;
+  }
+
+  function preOpenNote(){
+    const now = new Date();
+    const iso = now.toISOString().slice(0,10);
+    const upcoming = eventsNext10TradingDays();
+    const cats = topCatalysts();
+    const best = cats[0];
+
+    let guidance = "NO ORDERS unless there is a high-quality trigger and a clear cancel rule.";
+    if(best && best.score >= 7){
+      guidance = `PLAN ONLY (TRIGGER-BASED): ${best.instrument}. Do NOT chase gaps. Place a limit only if price comes to your level; include a same-day cancel rule.`;
+    }
+
+    return `PRE–US OPEN PLAN — ${iso} (Asia/Jerusalem)
+State: ${state.activeTrade ? "ACTIVE TRADE ON (manage only)" : "NO POSITION (scan for triggers)"}
+
+IMMEDIATE RISKS (next 24h):
+${upcoming.length ? upcoming.slice(0,6).map(formatEventLine).join("\n") : "- None listed — update calendar if needed."}
+
+TOP CANDIDATE:
+${best ? formatCatalystLine(best) : "- No scored catalyst ≥7. Default = NO TRADE."}
+
+ORDER PLAN (discipline):
+- LIMIT orders only.
+- Do not enter within 60–90 minutes ahead of a major scheduled print unless the edge is exceptional.
+- Any entry limit must have a CANCEL rule (end of day / before print).
+
+TODAY ACTION: ${guidance}
+
+Next check-in: Event playbook (post-release) or EOD debrief (22:30–23:10).`;
+  }
+
+  function eventPlaybookNote(){
+    const now = new Date();
+    const iso = now.toISOString().slice(0,10);
+
+    const evSel = document.getElementById("reactEvent").value;
+    const ev = state.events.find(x=>x.id === evSel);
+    const low = safeNum(document.getElementById("reactLow").value, NaN);
+    const cur = safeNum(document.getElementById("reactNow").value, NaN);
+
+    const checks = [
+      document.getElementById("chkNoNewLow").checked,
+      document.getElementById("chkBounceHold").checked,
+      document.getElementById("chkHigherLow").checked
+    ];
+    const passed = checks.filter(Boolean).length;
+
+    const notes = document.getElementById("reactNotes").value.trim();
+
+    let verdict = "NO-GO (wait)";
+    let why = "Need at least 2/3 stabilization checks to avoid catching a falling knife.";
+    if(passed >= 2){
+      verdict = "GO (trigger condition met)";
+      why = "Dip + stabilization detected (≥2/3 checks). Use limit entry; set OCO immediately; respect time stop.";
+    }
+
+    return `EVENT PLAYBOOK — ${iso} (Asia/Jerusalem)
+Event: ${ev ? `${ev.title} (${ev.dateStr}${ev.timeStr ? " "+ev.timeStr : ""})` : "— select an event —"}
+
+PRICE REACTION (manual):
+- Low after spike: ${Number.isFinite(low) ? "$"+low.toFixed(2) : "—"}
+- Current: ${Number.isFinite(cur) ? "$"+cur.toFixed(2) : "—"}
+
+STABILIZATION CHECKS:
+- No new low (20–30m): ${checks[0] ? "YES" : "NO"}
+- Bounce & hold: ${checks[1] ? "YES" : "NO"}
+- Higher low: ${checks[2] ? "YES" : "NO"}
+Pass count: ${passed}/3
+
+Headline notes:
+${notes || "—"}
+
+VERDICT: ${verdict}
+Why: ${why}
+
+If GO:
+- Place LIMIT entry only (no chasing).
+- Immediately place OCO exits (TP/SL) and set a hard time stop.
+If NO-GO:
+- Wait. Re-check in 15–30 minutes.`;
+  }
+
+  function eodNote(){
+    const now = new Date();
+    const iso = now.toISOString().slice(0,10);
+    const upcoming = eventsNext10TradingDays();
+    const cats = topCatalysts();
+    const best = cats[0];
+    const dec = decideTrade();
+
+    let activeBlock = "ACTIVE TRADE: None.";
+    if(state.activeTrade){
+      const t = state.activeTrade;
+      activeBlock = `ACTIVE TRADE: ${t.sym} (${t.typ})\n- Entry: $${t.entry.toFixed(2)} × ${t.shares}\n- Catalyst: ${t.catalyst || "—"}\n- Reminder: enforce Day 5–7 and Day ~10 rules; do not move stops wider.`;
+    }
+
+    return `END-OF-DAY DEBRIEF — ${iso} (Asia/Jerusalem)
+${activeBlock}
+
+WHAT CHANGED (fill manually):
+- Headline(s):
+- Price action summary:
+- Did any trigger fire? YES/NO (why)
+
+CATALYST PIPELINE (next):
+${upcoming.length ? upcoming.slice(0,8).map(formatEventLine).join("\n") : "- Add next week’s macro/earnings/policy items."}
+
+TOP SCORED CATALYSTS:
+${cats.length ? cats.map(formatCatalystLine).join("\n\n") : "- None scored."}
+
+DECISION: ${dec.decision}
+Reason: ${dec.reason}
+
+TOMORROW CHECK-IN:
+- Morning scan (08:00–10:00) + update calendar + re-score if new info changes surprise potential.`;
+  }
+
+  function weeklyResetNote(){
+    const now = new Date();
+    const iso = now.toISOString().slice(0,10);
+    const cats = topCatalysts();
+
+    return `WEEKLY RESET — ${iso}
+Goal: Build a 2–4 week catalyst pipeline so we are early, not reactive.
+
+1) Update SCHEDULED catalysts (next 10 trading days)
+- Macro: jobs/CPI/PPI/Fed/PMIs/auctions
+- Earnings: bellwethers + top ETF holdings
+- Policy deadlines: votes, enforcement dates, court rulings
+
+2) Add SEMI-SCHEDULED catalysts (next 1–4 weeks)
+- Budget negotiations / sanction windows / tariff deadlines
+- OPEC meetings / energy inventory seasonal points
+- Known regulatory milestones
+
+3) Define LATENT triggers (monitor)
+- Geopolitics escalation thresholds
+- Cyber incidents (critical infrastructure)
+- Weather/disaster threats impacting energy/insurance/logistics
+
+4) Re-score top candidates (only trade ≥7/10)
+Current top list:
+${cats.length ? cats.map(formatCatalystLine).join("\n\n") : "- None scored yet. Pick 1–3 real candidates and score them."}
+
+Deliverable:
+- 1-page watchlist with activation triggers + invalidations + reassessment dates.
+Default posture remains: NO TRADE unless edge is time-bounded and score ≥7.`;
+  }
+
+  // Wire routine buttons
+  const deskNoteEl = document.getElementById("deskNote");
+  document.getElementById("morningBtn").addEventListener("click", ()=> deskNoteEl.textContent = morningScanNote());
+  document.getElementById("preopenBtn").addEventListener("click", ()=> deskNoteEl.textContent = preOpenNote());
+  document.getElementById("eventBtn").addEventListener("click", ()=> deskNoteEl.textContent = eventPlaybookNote());
+  document.getElementById("eodBtn").addEventListener("click", ()=> deskNoteEl.textContent = eodNote());
+  document.getElementById("weeklyBtn").addEventListener("click", ()=> deskNoteEl.textContent = weeklyResetNote());
+
+  document.getElementById("copyNoteBtn").addEventListener("click", ()=> copyText(deskNoteEl.textContent));
+  document.getElementById("clearNoteBtn").addEventListener("click", ()=> deskNoteEl.textContent = "");
+
+  // ---------- React event dropdown ----------
+  function renderReactEventOptions(){
+    const sel = document.getElementById("reactEvent");
+    const items = [...state.events].sort(byDateAsc);
+    sel.innerHTML = "";
+    const opt0 = document.createElement("option");
+    opt0.value = "";
+    opt0.textContent = "— Select an event —";
+    sel.appendChild(opt0);
+    items.forEach(e=>{
+      const o = document.createElement("option");
+      o.value = e.id;
+      o.textContent = `${e.dateStr}${e.timeStr ? " "+e.timeStr : ""} • ${e.title}`;
+      sel.appendChild(o);
+    });
+  }
+
+  // ---------- Import / Export / Reset ----------
+  document.getElementById("exportBtn").addEventListener("click", ()=>{
+    const blob = new Blob([JSON.stringify(state,null,2)], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "catalyst-desk-export.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  document.getElementById("importBtn").addEventListener("click", ()=>{
+    const inp = document.createElement("input");
+    inp.type = "file";
+    inp.accept = "application/json";
+    inp.addEventListener("change", ()=>{
+      const f = inp.files[0];
+      if(!f) return;
+      const r = new FileReader();
+      r.onload = ()=>{
+        try{
+          const obj = JSON.parse(r.result);
+          state = { ...structuredClone(defaultState), ...obj };
+          saveState();
+        }catch(e){
+          alert("Invalid JSON file.");
+        }
+      };
+      r.readAsText(f);
+    });
+    inp.click();
+  });
+
+  document.getElementById("resetBtn").addEventListener("click", ()=>{
+    if(confirm("Reset everything? (clears localStorage)")){
+      localStorage.removeItem(STORE_KEY);
+      state = structuredClone(defaultState);
+      renderAll();
+    }
+  });
+
+  // ---------- Clipboard ----------
+  async function copyText(text){
+    try{
+      await navigator.clipboard.writeText(text);
+      toast("Copied to clipboard");
+    }catch(e){
+      // fallback
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+      toast("Copied (fallback)");
+    }
+  }
+
+  // ---------- Toast ----------
+  let toastTimer = null;
+  function toast(msg){
+    clearTimeout(toastTimer);
+    let t = document.getElementById("toast");
+    if(!t){
+      t = document.createElement("div");
+      t.id = "toast";
+      t.style.position="fixed";
+      t.style.left="18px";
+      t.style.bottom="18px";
+      t.style.padding="10px 12px";
+      t.style.borderRadius="14px";
+      t.style.border="1px solid rgba(110,231,255,.35)";
+      t.style.background="rgba(9,16,30,.85)";
+      t.style.color="#dfe9ff";
+      t.style.boxShadow="0 14px 32px rgba(0,0,0,.35)";
+      t.style.fontSize="12px";
+      t.style.zIndex="999";
+      document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.style.opacity="1";
+    toastTimer = setTimeout(()=>{ t.style.opacity="0"; }, 1600);
+  }
+
+  // ---------- Escape HTML ----------
+  function escapeHtml(str){
+    return (str||"").replace(/[&<>"']/g, m => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+    }[m]));
+  }
+
+  // ---------- Render all ----------
+  function renderAll(){
+    renderEvents();
+    renderCatalysts();
+    renderReactEventOptions();
+    renderActiveTrade();
+    // If we have trade cards, keep latest in output panel for convenience
+    if(state.tradeCards.length){
+      document.getElementById("tradeOut").textContent = state.tradeCards[0].text;
+    }
+  }
+
+  renderAll();
+</script>
+</body>
+</html>
