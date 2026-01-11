@@ -2,1518 +2,1897 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Speculative Trading Smart Agent (Event-Driven) — One-Trade Decision</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Catalyst Agent — One Trade (Event-Driven)</title>
   <style>
     :root{
-      --bg:#0b0f17;
-      --card:#101827;
-      --card2:#0f1624;
-      --text:#e7eefc;
-      --muted:#a9b6cf;
-      --border:#22304a;
-      --good:#4ade80;
-      --bad:#fb7185;
+      --bg:#485a7d;
+      --panel:#0f1a2e;
+      --panel2:#0c1628;
+      --text:#e8eefc;
+      --muted:#a9b7d6;
+      --line:rgba(255,255,255,.10);
+      --ok:#36d399;
       --warn:#fbbf24;
+      --bad:#fb7185;
       --accent:#60a5fa;
-      --shadow: 0 10px 28px rgba(0,0,0,.35);
-      --radius: 16px;
+      --accent2:#a78bfa;
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --radius:16px;
       --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
       --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
     }
     *{box-sizing:border-box}
     body{
       margin:0;
-      background: radial-gradient(1200px 800px at 20% 0%, #111c33 0%, var(--bg) 55%, #070a11 100%);
+      background:radial-gradient(1200px 900px at 20% -10%, rgba(96,165,250,.25), transparent 55%),
+                 radial-gradient(1000px 800px at 85% 0%, rgba(167,139,250,.20), transparent 50%),
+                 var(--bg);
       color:var(--text);
       font-family:var(--sans);
       line-height:1.35;
     }
-    .container{max-width:1160px;margin:0 auto;padding:22px 16px 48px}
-    header{
-      display:flex;gap:16px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;
-      padding:6px 2px 12px;
+    a{color:var(--accent); text-decoration:none}
+    a:hover{text-decoration:underline}
+    .wrap{max-width:1120px; margin:0 auto; padding:22px 16px 42px;}
+    .topbar{
+      display:flex; align-items:flex-start; justify-content:space-between; gap:14px;
+      padding:14px 16px; border:1px solid var(--line); border-radius:var(--radius);
+      background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02));
+      box-shadow:var(--shadow);
     }
-    h1{margin:0;font-size:22px;letter-spacing:.2px}
-    .subtitle{color:var(--muted);font-size:13.5px;margin-top:6px;max-width:900px}
-    .pillrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .brand{display:flex; gap:12px; align-items:center;}
+    .logo{
+      width:42px;height:42px;border-radius:14px;
+      background:linear-gradient(135deg, rgba(96,165,250,.95), rgba(167,139,250,.95));
+      display:grid;place-items:center;
+      font-weight:800;
+      box-shadow:0 12px 30px rgba(96,165,250,.18);
+    }
+    .brand h1{margin:0; font-size:18px; letter-spacing:.2px;}
+    .sub{margin:2px 0 0; color:var(--muted); font-size:12.5px;}
+    .rightbox{display:flex; flex-direction:column; align-items:flex-end; gap:8px;}
+    .pillrow{display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px;}
     .pill{
-      border:1px solid var(--border);
-      background: rgba(16,24,39,.65);
-      color: var(--muted);
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.03);
+      padding:8px 10px;
       border-radius:999px;
-      padding:6px 10px;
-      font-size:12px;
-      display:inline-flex;gap:8px;align-items:center;
+      font-size:12.5px;
+      color:var(--muted);
+      display:flex; gap:8px; align-items:center;
+      white-space:nowrap;
     }
-    .dot{width:8px;height:8px;border-radius:99px;background:var(--muted);display:inline-block}
-    .dot.good{background:var(--good)}
-    .dot.bad{background:var(--bad)}
+    .dot{width:9px;height:9px;border-radius:999px; background:var(--muted); opacity:.8}
+    .dot.ok{background:var(--ok)}
     .dot.warn{background:var(--warn)}
-
-    .grid{
-      display:grid;
-      grid-template-columns: 1.2fr .8fr;
-      gap:14px;
-      margin-top:12px;
+    .dot.bad{background:var(--bad)}
+    .actions{
+      display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end;
     }
-    @media (max-width: 980px){
-      .grid{grid-template-columns:1fr}
-    }
-
-    .card{
-      background: linear-gradient(180deg, rgba(16,24,39,.92), rgba(14,20,34,.92));
-      border:1px solid var(--border);
-      border-radius:var(--radius);
-      box-shadow: var(--shadow);
-      padding:14px 14px 12px;
-    }
-    .card h2{margin:0 0 8px;font-size:15.5px;letter-spacing:.2px}
-    .card h3{margin:0 0 6px;font-size:13px;color:var(--muted);font-weight:650;letter-spacing:.25px;text-transform:uppercase}
-    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-    .controls{
-      display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;justify-content:space-between
-    }
-    label{display:block;color:var(--muted);font-size:12px;margin-bottom:6px}
-    input, select, textarea{
-      background: rgba(6,10,18,.8);
-      color: var(--text);
-      border:1px solid var(--border);
-      border-radius:12px;
-      padding:10px 10px;
-      font-size:14px;
-      outline:none;
-      min-width: 160px;
-    }
-    textarea{min-width: 420px; min-height: 92px; font-family: var(--mono); font-size: 12.5px}
     button{
-      background: linear-gradient(180deg, rgba(96,165,250,.95), rgba(59,130,246,.95));
-      color:#06101f;
-      border:0;
-      border-radius:12px;
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.04);
+      color:var(--text);
       padding:10px 12px;
-      font-weight:750;
+      border-radius:12px;
       cursor:pointer;
-      box-shadow: 0 10px 22px rgba(59,130,246,.25);
-    }
-    button.secondary{
-      background: rgba(6,10,18,.8);
-      color: var(--text);
-      border: 1px solid var(--border);
-      box-shadow:none;
       font-weight:650;
     }
-    button:disabled{opacity:.6;cursor:not-allowed}
-    .hero{
-      border-radius: 22px;
-      padding: 16px 16px 14px;
-      border: 1px solid rgba(96,165,250,.45);
-      background: linear-gradient(180deg, rgba(15,24,44,.92), rgba(12,18,32,.92));
+    button.primary{
+      background:linear-gradient(135deg, rgba(96,165,250,.95), rgba(167,139,250,.90));
+      border-color:transparent;
+      box-shadow:0 18px 40px rgba(96,165,250,.18);
     }
-    .heroTitle{
-      display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap
+    button:hover{filter:brightness(1.05)}
+    button:active{transform:translateY(1px)}
+    button.small{padding:8px 10px; border-radius:10px; font-weight:600; font-size:12.5px;}
+    button.ghost{background:transparent}
+    .grid{
+      margin-top:16px;
+      display:grid;
+      grid-template-columns: 1.25fr .75fr;
+      gap:14px;
     }
-    .decisionBadge{
-      font-weight:900;
-      letter-spacing:.4px;
-      font-size:12px;
-      padding:6px 10px;
+    @media (max-width: 980px){ .grid{grid-template-columns:1fr} .rightcol{order:2} }
+    .card{
+      border:1px solid var(--line);
+      background:linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.02));
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      overflow:hidden;
+    }
+    .card .hd{
+      padding:14px 16px;
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      border-bottom:1px solid var(--line);
+      background:rgba(0,0,0,.10);
+    }
+    .card .hd h2{margin:0; font-size:14px; letter-spacing:.3px; text-transform:uppercase; color:#dbe7ff;}
+    .card .bd{padding:14px 16px;}
+    .bigDecision{
+      padding:18px 16px 16px;
+      border-bottom:1px solid var(--line);
+      background:
+        radial-gradient(800px 420px at 15% 0%, rgba(96,165,250,.16), transparent 60%),
+        radial-gradient(700px 420px at 90% 20%, rgba(167,139,250,.14), transparent 60%),
+        rgba(0,0,0,.12);
+    }
+    .decisionTitle{
+      display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+    }
+    .badge{
+      padding:8px 12px;
       border-radius:999px;
-      border:1px solid var(--border);
-      background: rgba(6,10,18,.8);
-      color: var(--muted);
+      font-weight:800;
+      letter-spacing:.6px;
+      text-transform:uppercase;
+      font-size:12px;
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.04);
     }
-    .decisionBadge.trade{color:#052012;border-color:rgba(74,222,128,.55);background:rgba(74,222,128,.15)}
-    .decisionBadge.notrade{color:#2a0b14;border-color:rgba(251,113,133,.55);background:rgba(251,113,133,.12)}
-    .bigTicker{
-      font-size:28px;
-      font-weight:950;
-      letter-spacing:1px;
-      margin-top:4px;
+    .badge.trade{border-color:rgba(54,211,153,.35); background:rgba(54,211,153,.10); color:#c9ffe9;}
+    .badge.notrade{border-color:rgba(251,113,133,.35); background:rgba(251,113,133,.10); color:#ffd6df;}
+    .badge.watch{border-color:rgba(251,191,36,.35); background:rgba(251,191,36,.10); color:#ffe9b0;}
+    .headline{
+      font-size:26px; margin:10px 0 4px; letter-spacing:.2px; font-weight:900;
     }
-    .smallMuted{color:var(--muted);font-size:13px}
-    .kv{
+    .why{
+      color:var(--muted);
+      margin:0;
+      font-size:13.5px;
+    }
+    .split3{
+      margin-top:14px;
+      display:grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap:12px;
+    }
+    @media (max-width: 980px){ .split3{grid-template-columns:1fr} }
+    .mini{
+      border:1px solid var(--line);
+      background:rgba(0,0,0,.10);
+      border-radius:14px;
+      padding:12px;
+    }
+    .mini h3{
+      margin:0 0 6px;
+      font-size:12px;
+      letter-spacing:.35px;
+      text-transform:uppercase;
+      color:#dbe7ff;
+    }
+    ul{margin:8px 0 0 18px; padding:0; color:var(--muted); font-size:13px}
+    li{margin:6px 0}
+    .tradeBox{
+      border:1px solid rgba(96,165,250,.25);
+      background:linear-gradient(180deg, rgba(96,165,250,.12), rgba(0,0,0,.10));
+      border-radius:14px;
+      padding:14px;
+      margin-top:14px;
+    }
+    .tradeBox .row{
       display:grid;
       grid-template-columns: 1fr 1fr;
       gap:10px;
       margin-top:10px;
     }
-    @media (max-width: 680px){
-      .kv{grid-template-columns:1fr}
-      textarea{min-width: 100%}
+    @media (max-width: 720px){ .tradeBox .row{grid-template-columns:1fr} }
+    .kv{
+      border:1px solid var(--line);
+      background:rgba(0,0,0,.12);
+      border-radius:12px;
+      padding:10px;
     }
-    .kv .k{
-      background: rgba(6,10,18,.55);
-      border:1px solid rgba(34,48,74,.9);
-      border-radius: 12px;
-      padding:10px 10px;
+    .kv .k{color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.35px;}
+    .kv .v{font-family:var(--mono); font-size:14px; margin-top:6px;}
+    .mathGrid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:10px;
+      margin-top:10px;
     }
-    .k .label{color:var(--muted);font-size:12px;margin-bottom:4px}
-    .k .val{font-family:var(--mono);font-size:13.5px}
-    .hr{height:1px;background:rgba(34,48,74,.9);margin:12px 0}
-    .list{margin:8px 0 0;padding-left:18px;color:var(--text)}
-    .list li{margin:5px 0}
-    .mono{font-family:var(--mono)}
-    .good{color:var(--good)}
-    .bad{color:var(--bad)}
-    .warn{color:var(--warn)}
-    .muted{color:var(--muted)}
-    .tableWrap{overflow:auto;border-radius:12px;border:1px solid rgba(34,48,74,.9)}
-    table{width:100%;border-collapse:collapse;min-width:740px;background:rgba(6,10,18,.55)}
-    th,td{padding:10px 10px;border-bottom:1px solid rgba(34,48,74,.9);font-size:13px;vertical-align:top}
-    th{color:var(--muted);text-align:left;font-weight:750}
-    tr:last-child td{border-bottom:0}
-    .tag{
-      display:inline-flex;align-items:center;gap:6px;
-      font-size:12px;padding:3px 8px;border-radius:999px;border:1px solid rgba(34,48,74,.9);
-      background: rgba(6,10,18,.35); color: var(--muted);
-      margin-right:6px;margin-top:4px;
-    }
-    .tag.hi{border-color:rgba(251,191,36,.55);background:rgba(251,191,36,.10);color:#fcd34d}
-    .tag.bin{border-color:rgba(251,113,133,.55);background:rgba(251,113,133,.10);color:#fecdd3}
-    .tag.pass{border-color:rgba(74,222,128,.55);background:rgba(74,222,128,.10);color:#bbf7d0}
-    .log{
+    @media (max-width: 720px){ .mathGrid{grid-template-columns:1fr} }
+    .mathGrid pre{
+      margin:0;
+      padding:12px;
+      border:1px solid var(--line);
+      background:rgba(0,0,0,.14);
+      border-radius:12px;
+      overflow:auto;
       font-family:var(--mono);
       font-size:12.5px;
-      white-space:pre-wrap;
-      background: rgba(6,10,18,.55);
-      border:1px solid rgba(34,48,74,.9);
-      border-radius: 12px;
-      padding:10px;
-      color: var(--muted);
-      max-height: 240px;
-      overflow:auto;
+      color:#dfe9ff;
     }
-    .footerNote{margin-top:10px;color:var(--muted);font-size:12.5px}
+
+    .list{
+      display:flex; flex-direction:column; gap:10px;
+    }
+    .item{
+      border:1px solid var(--line);
+      background:rgba(0,0,0,.10);
+      border-radius:14px;
+      padding:12px;
+      display:flex; justify-content:space-between; gap:12px;
+    }
+    .item .left{min-width:0}
+    .item .t{font-weight:800; margin:0 0 4px}
+    .item .m{margin:0; color:var(--muted); font-size:13px}
+    .tagrow{margin-top:8px; display:flex; flex-wrap:wrap; gap:8px}
+    .tag{
+      font-size:12px;
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.03);
+      color:var(--muted);
+    }
+    .tag.imp{border-color:rgba(251,191,36,.35); background:rgba(251,191,36,.10); color:#ffe9b0;}
+    .tag.bin{border-color:rgba(251,113,133,.35); background:rgba(251,113,133,.10); color:#ffd6df;}
+    .tag.src{border-color:rgba(96,165,250,.35); background:rgba(96,165,250,.10); color:#d7e8ff;}
+    .when{
+      font-family:var(--mono);
+      font-size:12px;
+      color:#dfe9ff;
+      white-space:nowrap;
+    }
+
+    details{
+      border:1px solid var(--line);
+      background:rgba(0,0,0,.10);
+      border-radius:14px;
+      padding:12px;
+    }
+    details summary{
+      cursor:pointer;
+      font-weight:800;
+      list-style:none;
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    details summary::-webkit-details-marker{display:none}
+    .hint{
+      color:var(--muted);
+      font-size:12.5px;
+      margin:10px 0 0;
+    }
+    .form{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:10px;
+      margin-top:10px;
+    }
+    @media (max-width: 720px){ .form{grid-template-columns:1fr} }
+    label{display:block; color:var(--muted); font-size:12px; margin:0 0 6px}
+    input, select{
+      width:100%;
+      padding:10px 10px;
+      border-radius:12px;
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.03);
+      color:var(--text);
+      outline:none;
+    }
+    input::placeholder{color:rgba(169,183,214,.7)}
+    .footnote{
+      margin-top:14px;
+      color:rgba(169,183,214,.85);
+      font-size:12px;
+    }
+    .dangerNote{
+      border-left:3px solid rgba(251,113,133,.75);
+      padding-left:10px;
+      margin-top:10px;
+      color:rgba(255,214,223,.9);
+      font-size:12.5px;
+    }
+    .okNote{
+      border-left:3px solid rgba(54,211,153,.75);
+      padding-left:10px;
+      margin-top:10px;
+      color:rgba(201,255,233,.9);
+      font-size:12.5px;
+    }
+    .muted{color:var(--muted)}
+    .mono{font-family:var(--mono)}
+    .tiny{font-size:12px}
   </style>
 </head>
 
 <body>
-  <div class="container">
-    <header>
-      <div>
-        <h1>Speculative Trading Smart Agent (Event-Driven) — One-Trade Decision</h1>
-        <div class="subtitle">
-          Designed to follow your V2.1 mandate: <span class="mono">Price validity overrides catalyst quality.</span>
-          Defaults to <b>NO TRADE</b> unless edge is clear (score ≥ 7 and all guardrails pass).
-        </div>
-        <div class="subtitle">
-          Educational tool only. Not financial advice. If you cannot fetch fresh intel with confidence, the agent will refuse to trade.
-        </div>
-      </div>
-      <div class="pillrow" id="sourcePills">
-        <span class="pill"><span class="dot warn" id="pillMarket"></span>Market status</span>
-        <span class="pill"><span class="dot warn" id="pillPrices"></span>Prices</span>
-        <span class="pill"><span class="dot warn" id="pillCalendars"></span>Calendars</span>
-        <span class="pill"><span class="dot warn" id="pillNews"></span>News proxy</span>
-      </div>
-    </header>
-
-    <div class="card">
-      <h2>Run the agent (fresh “INTEL PULL” every click)</h2>
-      <div class="controls">
-        <div class="row">
-          <div>
-            <label>Capital per trade (USD) — Israel rules</label>
-            <input id="capital" type="number" min="1000" max="2000" step="50" value="1500" />
-          </div>
-          <div>
-            <label>Operating mode</label>
-            <select id="mode">
-              <option value="eod" selected>Low-touch (EOD confirmation default)</option>
-              <option value="intraday">Intraday (experimental; uses live quote if available)</option>
-            </select>
-          </div>
-          <div>
-            <label>Universe preset</label>
-            <select id="preset">
-              <option value="standard" selected>Standard event-driven ETFs + liquid mega-caps</option>
-              <option value="defense">Defense + energy + cyber focus</option>
-              <option value="rates">Rates/CPI/Fed focus (TLT + financials)</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="row">
-          <button id="runBtn">INTEL PULL → DECIDE ONE TRADE</button>
-          <button class="secondary" id="copyBtn" disabled>Copy trade card</button>
-          <button class="secondary" id="printBtn">Print</button>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="brand">
+        <div class="logo">CA</div>
+        <div>
+          <h1>Catalyst Agent — One Trade (Event-Driven)</h1>
+          <p class="sub">Click once → auto-fetch next 14 days (macro + auctions + earnings) + live geopolitics/regulation/cyber/disasters → apply V2.1 gates → output TRADE or NO TRADE.</p>
         </div>
       </div>
 
-      <div class="footerNote">
-        Data fetching in static browsers can be affected by CORS. This file tries direct calls first, then free proxy fallback.
-        If scheduled catalysts cannot be fetched confidently, decision will be <b>NO TRADE</b> (Watchlist mode).
+      <div class="rightbox">
+        <div class="pillrow" id="statusRow">
+          <!-- populated -->
+        </div>
+        <div class="actions">
+          <button class="primary" id="btnRun">Refresh Intel & Decide</button>
+          <button class="small" id="btnCopy">Copy desk note</button>
+          <button class="small ghost" id="btnReset">Reset</button>
+        </div>
       </div>
     </div>
 
     <div class="grid">
-      <div>
-        <section class="card hero" id="decisionCard">
-          <div class="heroTitle">
-            <div>
-              <div class="smallMuted">Decision</div>
-              <div class="bigTicker" id="decisionHeadline">—</div>
-              <div class="smallMuted" id="decisionSub">Click “INTEL PULL” to generate a fresh decision.</div>
+      <div class="leftcol">
+        <div class="card" id="decisionCard">
+          <div class="bigDecision">
+            <div class="decisionTitle">
+              <div class="badge watch" id="decisionBadge">WATCHLIST MODE</div>
+              <div class="pill"><span class="dot warn" id="intelDot"></span><span id="lastRefresh">Not refreshed yet</span></div>
             </div>
-            <div class="decisionBadge" id="decisionBadge">WAITING</div>
+            <div class="headline" id="headline">Click “Refresh Intel & Decide”</div>
+            <p class="why" id="why">This agent defaults to <b>NO TRADE</b> if price data or fresh catalyst intel is incomplete, or if the setup fails the Price Sanity Gate.</p>
+
+            <div class="tradeBox" id="tradeBox" style="display:none;">
+              <div class="decisionTitle" style="margin-bottom:8px;">
+                <div style="font-weight:900; letter-spacing:.2px;">TRADE CARD (limit-only + OCO)</div>
+                <div class="badge trade" id="tradeScoreBadge">Score: —</div>
+              </div>
+
+              <div class="row">
+                <div class="kv">
+                  <div class="k">Instrument</div>
+                  <div class="v" id="tradeInstrument">—</div>
+                </div>
+                <div class="kv">
+                  <div class="k">Catalyst Window</div>
+                  <div class="v" id="tradeWindow">—</div>
+                </div>
+              </div>
+
+              <div class="row">
+                <div class="kv">
+                  <div class="k">Entry (LIMIT)</div>
+                  <div class="v" id="tradeEntry">—</div>
+                </div>
+                <div class="kv">
+                  <div class="k">Exits (OCO)</div>
+                  <div class="v" id="tradeExits">—</div>
+                </div>
+              </div>
+
+              <div class="row">
+                <div class="kv">
+                  <div class="k">Position Size</div>
+                  <div class="v" id="tradeSize">—</div>
+                </div>
+                <div class="kv">
+                  <div class="k">Time stop</div>
+                  <div class="v" id="tradeTimeStop">—</div>
+                </div>
+              </div>
+
+              <div class="mathGrid">
+                <pre id="mathUpside">—</pre>
+                <pre id="mathDownside">—</pre>
+              </div>
+
+              <div class="okNote" id="sanityNote" style="display:none;"></div>
+              <div class="dangerNote" id="guardrailNote" style="display:none;"></div>
+            </div>
+
+            <div class="tradeBox" id="watchBox" style="display:none; border-color: rgba(251,191,36,.30); background:linear-gradient(180deg, rgba(251,191,36,.10), rgba(0,0,0,.10));">
+              <div class="decisionTitle" style="margin-bottom:8px;">
+                <div style="font-weight:900; letter-spacing:.2px;">WATCHLIST CARD</div>
+                <div class="badge watch" id="watchReasonBadge">Reason: —</div>
+              </div>
+              <div class="list" id="watchList"></div>
+              <p class="hint" id="watchHint"></p>
+            </div>
+
+            <div class="split3">
+              <div class="mini">
+                <h3>Decision Rules</h3>
+                <ul>
+                  <li><b>Default: NO TRADE</b> unless catalyst score ≥ 7.</li>
+                  <li><b>Price Sanity Gate runs first.</b> If price is unknown → NO TRADE.</li>
+                  <li>ETFs: extension > +1.8% from D-Low → disqualified.</li>
+                  <li>Stocks: extension > +2.5% from D-Low → disqualified.</li>
+                  <li>Binary catalyst + already extended → WATCHLIST only.</li>
+                </ul>
+              </div>
+              <div class="mini">
+                <h3>Timeframe</h3>
+                <ul>
+                  <li>Horizon: weeks → months (agent uses next 14 days for catalyst discovery).</li>
+                  <li>Operating mode: <b>End-of-Day confirmation</b> by default.</li>
+                  <li>One active trade at a time. No averaging down.</li>
+                </ul>
+              </div>
+              <div class="mini">
+                <h3>Math (Israel defaults)</h3>
+                <ul>
+                  <li>Capital per trade: $1,000–$2,000</li>
+                  <li>Fees: $8 per executed order (round-trip = $16)</li>
+                  <li>Tax: 25% on gains</li>
+                  <li>Outputs show exact numbers + assumptions</li>
+                </ul>
+              </div>
+            </div>
+
           </div>
-          <div class="hr"></div>
-          <div id="decisionBody" class="smallMuted">No run yet.</div>
-        </section>
 
-        <section class="card" style="margin-top:14px">
-          <h2>Forward Catalyst Calendar (next ~10 trading days)</h2>
-          <div class="smallMuted">Pulled fresh each run. If unavailable, the system biases to NO TRADE.</div>
-          <div class="hr"></div>
-          <div id="calendarBody" class="smallMuted">—</div>
-        </section>
+          <div class="bd">
+            <details open>
+              <summary>
+                <span>Upcoming 14 Days — Scheduled catalysts (auto-fetched)</span>
+                <span class="muted tiny" id="scheduledCount">0 items</span>
+              </summary>
+              <div class="list" id="scheduledList" style="margin-top:10px;"></div>
+              <p class="hint">Sources: BLS iCal (macro), Treasury FiscalData (auctions), optional FMP (earnings + broader macro). If a source fails, the agent will bias to NO TRADE.</p>
+            </details>
 
-        <section class="card" style="margin-top:14px">
-          <h2>Ranked Catalyst List (scorable only)</h2>
-          <div class="smallMuted">Disqualified instruments (extension gate) are not scored or ranked; they go to Watchlist with triggers.</div>
-          <div class="hr"></div>
-          <div id="rankedBody" class="smallMuted">—</div>
-        </section>
+            <div style="height:10px"></div>
 
-        <section class="card" style="margin-top:14px">
-          <h2>Watchlist Card (if NO TRADE or disqualifications)</h2>
-          <div class="smallMuted">Shows activation triggers (pullback levels / post-event EOD conditions) only.</div>
-          <div class="hr"></div>
-          <div id="watchlistBody" class="smallMuted">—</div>
-        </section>
+            <details>
+              <summary>
+                <span>Live / Latent triggers — geopolitics · regulation · cyber · disasters (last 48h)</span>
+                <span class="muted tiny" id="liveCount">0 items</span>
+              </summary>
+              <div class="list" id="liveList" style="margin-top:10px;"></div>
+              <p class="hint">These are monitoring triggers. The agent will not “force” trades on vague headlines; it uses these only to support scheduled, time-bounded catalysts.</p>
+            </details>
 
+            <div style="height:10px"></div>
+
+            <details>
+              <summary>
+                <span>Settings</span>
+                <span class="muted tiny">stored locally</span>
+              </summary>
+
+              <div class="form">
+                <div>
+                  <label for="cap">Capital per trade (USD)</label>
+                  <input id="cap" type="number" min="1000" max="2000" step="50" placeholder="1800" />
+                </div>
+                <div>
+                  <label for="mode">Operating mode</label>
+                  <select id="mode">
+                    <option value="eod">EOD confirmation (default)</option>
+                    <option value="intraday">Intraday view (still limit-only)</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="fee">Fee per executed order (USD)</label>
+                  <input id="fee" type="number" min="0" step="1" placeholder="8" />
+                </div>
+                <div>
+                  <label for="tax">Tax on gains (%)</label>
+                  <input id="tax" type="number" min="0" max="50" step="1" placeholder="25" />
+                </div>
+                <div style="grid-column:1/-1">
+                  <label for="fmp">Optional: FMP API key (free tier) — improves earnings coverage</label>
+                  <input id="fmp" type="password" placeholder="Paste key (stored locally). Leave blank to run without it." />
+                  <p class="hint">If you prefer keyless-only, leave blank. The app will still fetch BLS macro + Treasury auctions + live GDELT/USGS/CISA triggers.</p>
+                </div>
+              </div>
+
+              <p class="dangerNote">
+                Browser security note: Some sources can block direct browser requests (CORS). This page automatically retries through a public “raw” proxy when needed.
+                For best results, open this file via a local server (not file://). Example: <span class="mono">python -m http.server 8000</span>.
+              </p>
+
+              <div class="footnote">
+                Educational tool only. Not investment advice. Markets are risky. This agent intentionally prefers “NO TRADE” over low-quality setups.
+              </div>
+            </details>
+          </div>
+        </div>
       </div>
 
-      <div>
-        <section class="card" id="rulesBox">
-          <h2>Decision Rules</h2>
-          <div class="hr"></div>
-          <div id="rulesBody" class="smallMuted">—</div>
-        </section>
+      <div class="rightcol">
+        <div class="card">
+          <div class="hd">
+            <h2>Candidate Universe</h2>
+            <div class="pill"><span class="dot ok"></span><span class="mono" id="universeCount">—</span></div>
+          </div>
+          <div class="bd">
+            <p class="muted tiny" style="margin:0 0 10px;">
+              Intentionally small, liquid, event-mapped. You can edit the tickers list inside the HTML.
+            </p>
+            <div class="list" id="universeList"></div>
 
-        <section class="card" id="timeframeBox" style="margin-top:14px">
-          <h2>Timeframe</h2>
-          <div class="hr"></div>
-          <div id="timeframeBody" class="smallMuted">—</div>
-        </section>
+            <div style="height:12px"></div>
 
-        <section class="card" id="mathBox" style="margin-top:14px">
-          <h2>MATH (exact numbers)</h2>
-          <div class="hr"></div>
-          <div id="mathBody" class="smallMuted">—</div>
-        </section>
+            <details>
+              <summary>
+                <span>Price Sanity Gate preview</span>
+                <span class="muted tiny" id="gateCount">—</span>
+              </summary>
+              <div class="list" id="gateList" style="margin-top:10px;"></div>
+              <p class="hint">Gate uses: Current (intraday quote when available, otherwise last close) + latest valid daily low (D-Low).</p>
+            </details>
 
-        <section class="card" style="margin-top:14px">
-          <h2>Run Log</h2>
-          <div class="smallMuted">Transparency: what was fetched, what failed, what assumptions were used.</div>
-          <div class="hr"></div>
-          <div class="log" id="log"></div>
-        </section>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
 <script>
-(() => {
-  "use strict";
+/* =========================
+   Catalyst Agent — V2.1 UI Simplification
+   - ONE button
+   - Auto-fetch next 14 days (scheduled) + live triggers (unscheduled)
+   - Hard bias to NO TRADE when intel/price invalid
+   - Big trade card + separate boxes + visible math
+   ========================= */
 
-  // =========================
-  // CONFIG (prompt-aligned)
-  // =========================
-  const FEES_PER_ORDER_USD = 8;
-  const TAX_RATE = 0.25;
+const SETTINGS_KEY = "CA_SETTINGS_V2_1";
+const state = {
+  sources: {},
+  scheduled: [],
+  live: [],
+  prices: {},        // { TICKER: { current, lastClose, dLow, extPct, ts, ok } }
+  earnings: [],      // { ticker, dt, whenText }
+  decision: null,
+  lastDeskNote: ""
+};
 
-  const EXTENSION_LIMIT = { ETF: 1.8, STOCK: 2.5 };     // hard disqualification
-  const BINARY_GUARD_EXTENSION = 1.2;                    // if binary catalyst ahead AND > +1.2% extended => watchlist only
-  const MIN_SCORE_TO_TRADE = 7;
+// Small, liquid universe (edit here if needed)
+const UNIVERSE = [
+  { t:"SPY", kind:"ETF", theme:["index","risk"] },
+  { t:"QQQ", kind:"ETF", theme:["index","growth"] },
+  { t:"TLT", kind:"ETF", theme:["rates","duration"] },
+  { t:"IEF", kind:"ETF", theme:["rates"] },
+  { t:"XLF", kind:"ETF", theme:["banks","rates"] },
+  { t:"XLE", kind:"ETF", theme:["energy","geopolitics"] },
+  { t:"SMH", kind:"ETF", theme:["semis","export-controls","earnings"] },
+  { t:"ITA", kind:"ETF", theme:["defense","geopolitics"] },
+  { t:"CIBR",kind:"ETF", theme:["cyber"] },
 
-  const TARGET_UPSIDE = { ETF: 0.15, STOCK: 0.20 };      // +15% ETF, +20% stock
-  const STOP_LOSS = { ETF: 0.08, STOCK: 0.10 };          // -8% ETF, -10% stock
-  const TIME_STOP_TRADING_DAYS = 20;                     // default time stop
+  // A few bellwether large caps (optional stock trades)
+  { t:"NVDA", kind:"Stock", theme:["semis","earnings"] },
+  { t:"MSFT", kind:"Stock", theme:["cloud","regulation","earnings"] },
+  { t:"CRWD", kind:"Stock", theme:["cyber","earnings"] }
+];
 
-  // Candidates: keep this small & liquid by design.
-  // Each has a "theme" used for GDELT attention proxy.
-  const PRESETS = {
-    standard: [
-      { symbol:"SMH", type:"ETF",  name:"VanEck Semiconductor ETF", theme:"semis" },
-      { symbol:"CIBR",type:"ETF",  name:"First Trust Nasdaq Cybersecurity", theme:"cyber" },
-      { symbol:"ITA", type:"ETF",  name:"iShares U.S. Aerospace & Defense", theme:"defense" },
-      { symbol:"XLE", type:"ETF",  name:"Energy Select Sector SPDR", theme:"energy" },
-      { symbol:"TLT", type:"ETF",  name:"iShares 20+ Year Treasury Bond", theme:"rates" },
-      { symbol:"XLF", type:"ETF",  name:"Financial Select Sector SPDR", theme:"rates" },
+// Rules (from your prompt)
+const RULES = {
+  minScore: 7,
+  extETF: 1.8,
+  extStock: 2.5,
+  binaryExtGuard: 1.2,
+  tpETF: 0.15,
+  tpStock: 0.20,
+  slETF: 0.08,
+  slStock: 0.10,
+  timeStopTradingDays: 20
+};
 
-      { symbol:"NVDA",type:"STOCK",name:"NVIDIA", theme:"semis" },
-      { symbol:"CRWD",type:"STOCK",name:"CrowdStrike", theme:"cyber" },
-      { symbol:"LMT", type:"STOCK",name:"Lockheed Martin", theme:"defense" },
-      { symbol:"XOM", type:"STOCK",name:"Exxon Mobil", theme:"energy" },
-      { symbol:"MSFT",type:"STOCK",name:"Microsoft", theme:"cloud" },
-      { symbol:"PLTR",type:"STOCK",name:"Palantir", theme:"defense" },
-    ],
-    defense: [
-      { symbol:"ITA", type:"ETF",  name:"iShares U.S. Aerospace & Defense", theme:"defense" },
-      { symbol:"PPA", type:"ETF",  name:"Invesco Aerospace & Defense ETF", theme:"defense" },
-      { symbol:"XLE", type:"ETF",  name:"Energy Select Sector SPDR", theme:"energy" },
-      { symbol:"CIBR",type:"ETF",  name:"First Trust Nasdaq Cybersecurity", theme:"cyber" },
-      { symbol:"HACK",type:"ETF",  name:"ETFMG Prime Cyber Security ETF", theme:"cyber" },
-      { symbol:"LMT", type:"STOCK",name:"Lockheed Martin", theme:"defense" },
-      { symbol:"NOC", type:"STOCK",name:"Northrop Grumman", theme:"defense" },
-      { symbol:"RTX", type:"STOCK",name:"RTX", theme:"defense" },
-      { symbol:"CRWD",type:"STOCK",name:"CrowdStrike", theme:"cyber" },
-      { symbol:"PANW",type:"STOCK",name:"Palo Alto Networks", theme:"cyber" },
-      { symbol:"XOM", type:"STOCK",name:"Exxon Mobil", theme:"energy" },
-    ],
-    rates: [
-      { symbol:"TLT", type:"ETF",  name:"iShares 20+ Year Treasury Bond", theme:"rates" },
-      { symbol:"IEF", type:"ETF",  name:"iShares 7-10 Year Treasury Bond", theme:"rates" },
-      { symbol:"XLF", type:"ETF",  name:"Financial Select Sector SPDR", theme:"rates" },
-      { symbol:"KRE", type:"ETF",  name:"SPDR S&P Regional Banking ETF", theme:"rates" },
-      { symbol:"QQQ", type:"ETF",  name:"Invesco QQQ Trust", theme:"rates" },
-      { symbol:"JPM", type:"STOCK",name:"JPMorgan Chase", theme:"rates" },
-      { symbol:"BAC", type:"STOCK",name:"Bank of America", theme:"rates" },
-      { symbol:"MS",  type:"STOCK",name:"Morgan Stanley", theme:"rates" },
-      { symbol:"GS",  type:"STOCK",name:"Goldman Sachs", theme:"rates" },
-    ]
-  };
+// High-impact macro keywords (BLS iCal + BEA)
+const HIGH_IMPACT = [
+  "Consumer Price Index", "CPI",
+  "Employment Situation", "Nonfarm", "Unemployment",
+  "Producer Price Index", "PPI",
+  "Retail Sales",
+  "Gross Domestic Product", "GDP",
+  "Personal Income", "Personal Consumption Expenditures", "PCE"
+];
 
-  // Theme-to-news query (GDELT attention proxy).
-  // Keep queries focused on catalysts, not generic.
-  const THEME_QUERIES = {
-    semis: '(semiconductor OR chip OR "export controls" OR TSMC OR Nvidia OR "AI chips")',
-    cyber: '(cyberattack OR ransomware OR "data breach" OR "critical infrastructure" OR "zero day")',
-    defense: '(pentagon OR "defense spending" OR missile OR drone OR "air defense" OR "military aid")',
-    energy: '(OPEC OR "oil price" OR "Red Sea" OR "Strait of Hormuz" OR Iran OR "production cut")',
-    rates: '(CPI OR inflation OR "Federal Reserve" OR FOMC OR yields OR "Treasury auction" OR "jobs report")',
-    cloud: '(antitrust OR "AI regulation" OR "cloud outage" OR "data center" OR "chip shortage")'
-  };
+// Binary catalysts (guardrail)
+function isBinaryTitle(title){
+  const s = (title||"").toLowerCase();
+  return (
+    s.includes("consumer price index") || s.includes("cpi") ||
+    s.includes("employment situation") || s.includes("nonfarm") || s.includes("unemployment rate") ||
+    s.includes("producer price index") || s.includes("ppi") ||
+    s.includes("retail sales") ||
+    s.includes("gross domestic product") || s.includes("gdp") ||
+    s.includes("fomc") || s.includes("fed decision") ||
+    s.includes("earnings")
+  );
+}
 
-  // Macro events we treat as "binary catalysts" when relevant.
-  const BINARY_MACRO_KEYWORDS = [
-    "CPI","Consumer Price","PPI","Payroll","Employment","FOMC","Fed","Rate Decision","Powell",
-    "PMI","ISM","GDP","Treasury Auction"
+// Map events to themes (very simple but transparent)
+function themesFromTitle(title){
+  const s = (title||"").toLowerCase();
+  const tags = new Set();
+
+  if (s.includes("cpi") || s.includes("consumer price")) { tags.add("inflation"); tags.add("rates"); }
+  if (s.includes("ppi") || s.includes("producer price")) { tags.add("inflation"); tags.add("rates"); }
+  if (s.includes("employment") || s.includes("nonfarm") || s.includes("unemployment")) { tags.add("jobs"); tags.add("rates"); tags.add("risk"); }
+  if (s.includes("retail sales")) { tags.add("growth"); tags.add("risk"); }
+  if (s.includes("gdp")) { tags.add("growth"); tags.add("risk"); }
+  if (s.includes("pce") || s.includes("personal consumption")) { tags.add("inflation"); tags.add("rates"); }
+  if (s.includes("auction") || s.includes("treasury")) { tags.add("rates"); }
+
+  if (s.includes("sanction") || s.includes("tariff") || s.includes("export control") || s.includes("antitrust") || s.includes("sec") || s.includes("ftc") || s.includes("doj")) {
+    tags.add("regulation");
+  }
+  if (s.includes("cyber") || s.includes("ransomware") || s.includes("breach") || s.includes("ddos")) tags.add("cyber");
+  if (s.includes("iran") || s.includes("israel") || s.includes("ukraine") || s.includes("taiwan") || s.includes("missile") || s.includes("red sea") || s.includes("shipping") ) tags.add("geopolitics");
+  if (s.includes("oil") || s.includes("opec") || s.includes("gas") || s.includes("energy")) tags.add("energy");
+  if (s.includes("semiconductor") || s.includes("semis") || s.includes("chip")) tags.add("semis");
+  if (s.includes("defense") || s.includes("pentagon") || s.includes("weapons")) tags.add("defense");
+  if (s.includes("earnings")) tags.add("earnings");
+
+  return Array.from(tags);
+}
+
+// Universe→likely catalyst mapping (for scoring explanation)
+function relevanceScore(ticker, eventThemes){
+  const u = UNIVERSE.find(x=>x.t===ticker);
+  if(!u) return 0;
+  const th = new Set(u.theme);
+  let hits = 0;
+  for (const et of eventThemes) if (th.has(et)) hits++;
+  // add broad mapping
+  if (th.has("rates") && eventThemes.includes("inflation")) hits++;
+  if (th.has("rates") && eventThemes.includes("jobs")) hits++;
+  if (th.has("risk") && (eventThemes.includes("growth") || eventThemes.includes("rates"))) hits++;
+  return hits;
+}
+
+/* ============
+   Settings
+   ============ */
+function loadSettings(){
+  const def = { cap: 1800, fee: 8, tax: 25, mode: "eod", fmpKey: "" };
+  try{
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if(!raw) return def;
+    const x = JSON.parse(raw);
+    return { ...def, ...x };
+  }catch{ return def; }
+}
+function saveSettings(s){
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+}
+function bindSettingsUI(){
+  const s = loadSettings();
+  $("#cap").value = s.cap;
+  $("#fee").value = s.fee;
+  $("#tax").value = s.tax;
+  $("#mode").value = s.mode;
+  $("#fmp").value = s.fmpKey || "";
+
+  $("#cap").addEventListener("input", ()=>{ const z=loadSettings(); z.cap=clampNum($("#cap").value,1000,2000,1800); saveSettings(z); });
+  $("#fee").addEventListener("input", ()=>{ const z=loadSettings(); z.fee=clampNum($("#fee").value,0,999,8); saveSettings(z); });
+  $("#tax").addEventListener("input", ()=>{ const z=loadSettings(); z.tax=clampNum($("#tax").value,0,50,25); saveSettings(z); });
+  $("#mode").addEventListener("change", ()=>{ const z=loadSettings(); z.mode=$("#mode").value; saveSettings(z); });
+  $("#fmp").addEventListener("input", ()=>{ const z=loadSettings(); z.fmpKey=$("#fmp").value.trim(); saveSettings(z); });
+}
+
+function clampNum(v,min,max,def){
+  const n = Number(v);
+  if(!Number.isFinite(n)) return def;
+  return Math.max(min, Math.min(max, n));
+}
+
+/* ============
+   Fetch helpers (direct + fallback proxy)
+   ============ */
+async function fetchText(url, opts={}){
+  // 1) direct
+  try{
+    const r = await fetch(url, { ...opts, cache:"no-store" });
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    return await r.text();
+  }catch(e1){
+    // 2) allorigins raw
+    const prox = "https://api.allorigins.win/raw?url=" + encodeURIComponent(url);
+    const r2 = await fetch(prox, { cache:"no-store" });
+    if(!r2.ok) throw e1;
+    return await r2.text();
+  }
+}
+async function fetchJSON(url, opts={}){
+  const txt = await fetchText(url, opts);
+  try{
+    return JSON.parse(txt);
+  }catch{
+    // Some proxies can add unexpected output; try to salvage JSON by finding first { or [
+    const i1 = txt.indexOf("{");
+    const i2 = txt.indexOf("[");
+    const i = (i1===-1) ? i2 : (i2===-1 ? i1 : Math.min(i1,i2));
+    if(i>=0){
+      return JSON.parse(txt.slice(i));
+    }
+    throw new Error("JSON parse failed");
+  }
+}
+function timeout(ms){ return new Promise((_,rej)=>setTimeout(()=>rej(new Error("timeout")),ms)); }
+
+/* ============
+   Data sources (free/open)
+   ============ */
+
+// 1) Macro: BLS iCal (keyless) — https://www.bls.gov/schedule/news_release/bls.ics
+async function fetchBLSCalendar(nextDays=14){
+  const url = "https://www.bls.gov/schedule/news_release/bls.ics";
+  const ics = await fetchText(url);
+  const events = parseICS(ics);
+
+  const now = new Date();
+  const end = addDays(now, nextDays);
+  const out = events
+    .filter(e => e.dt && e.dt >= startOfDay(now) && e.dt <= end)
+    .map(e => ({
+      title: e.summary || "BLS Release",
+      dt: e.dt,
+      source: "BLS iCal",
+      kind: "Macro",
+      importance: isHighImpact(e.summary) ? "High" : "Normal",
+      binary: isBinaryTitle(e.summary),
+      themes: themesFromTitle(e.summary)
+    }))
+    .sort((a,b)=>a.dt-b.dt);
+
+  return out;
+}
+
+// 2) Auctions: US Treasury FiscalData Upcoming Auctions (keyless)
+async function fetchTreasuryAuctions(nextDays=14){
+  // Base: https://api.fiscaldata.treasury.gov/services/api/fiscal_service/
+  // Dataset: Treasury Securities Auctions Data / Upcoming auctions endpoints vary by dataset; we use a commonly exposed "upcoming auctions" endpoint.
+  // If endpoint changes, the agent will show source failure and bias to NO TRADE.
+  const base = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/";
+  const endpoint = "v1/debt/mspd/upcoming_auctions"; // best-effort; if your environment differs, you can adjust endpoint here.
+  const now = new Date();
+  const from = fmtDate(now);
+  const to = fmtDate(addDays(now, nextDays));
+  const qs = new URLSearchParams({
+    "filter": `auction_date:gte:${from},auction_date:lte:${to}`,
+    "page[size]": "200"
+  }).toString();
+
+  const url = base + endpoint + "?" + qs;
+  const j = await fetchJSON(url);
+  const rows = (j && j.data) ? j.data : [];
+  const out = rows.map(r=>{
+    const title = `Treasury Auction — ${r.security_term || r.security_type || "Marketable"} (${r.security_type||""})`.trim();
+    const dt = r.auction_date ? new Date(r.auction_date+"T00:00:00") : null;
+    return {
+      title,
+      dt,
+      source:"FiscalData (Treasury)",
+      kind:"Auction",
+      importance:"Normal",
+      binary:false,
+      themes: ["rates"]
+    };
+  }).filter(x=>x.dt).sort((a,b)=>a.dt-b.dt);
+
+  return out;
+}
+
+// 3) Earnings: optional FMP (free key) — stable endpoint
+async function fetchEarningsFMP(nextDays=14, apiKey=""){
+  if(!apiKey) return [];
+  const now = new Date();
+  const from = fmtDate(now);
+  const to = fmtDate(addDays(now, nextDays));
+  const url = "https://financialmodelingprep.com/stable/earnings-calendar"
+    + `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&apikey=${encodeURIComponent(apiKey)}`;
+
+  const j = await fetchJSON(url);
+  const rows = Array.isArray(j) ? j : (j && j.data ? j.data : []);
+  const tickers = new Set(UNIVERSE.map(x=>x.t));
+
+  const out = rows
+    .filter(r => tickers.has((r.symbol||"").toUpperCase()))
+    .map(r => {
+      const t = (r.symbol||"").toUpperCase();
+      const dt = r.date ? new Date(r.date+"T00:00:00") : null;
+      return {
+        title: `Earnings — ${t}`,
+        dt,
+        source:"FMP",
+        kind:"Earnings",
+        importance:"High",
+        binary:true,
+        themes:["earnings", ...themesFromTitle(`earnings ${t}`)],
+        ticker: t
+      };
+    })
+    .filter(x=>x.dt)
+    .sort((a,b)=>a.dt-b.dt);
+
+  return out;
+}
+
+// 4) Live triggers: GDELT (keyless)
+async function fetchGDELTLive(hours=48){
+  const end = new Date();
+  const start = new Date(end.getTime() - hours*60*60*1000);
+
+  const queries = [
+    { key:"Geopolitics", q:'(Israel OR Iran OR Ukraine OR Taiwan OR "Red Sea" OR "Strait of Hormuz" OR missile OR airstrike OR sanctions)' },
+    { key:"Regulation", q:'(tariff OR "export controls" OR antitrust OR "SEC" OR "FTC" OR "DOJ" OR "EU Commission" OR court ruling OR ban)' },
+    { key:"Cyber", q:'(ransomware OR cyberattack OR "data breach" OR outage OR ddos)' },
+    { key:"Disasters", q:'(earthquake OR hurricane OR typhoon OR wildfire OR flood)' }
   ];
 
-  // Macro sensitivity: which instruments should treat macro as directly relevant & binary.
-  function macroSensitive(candidate){
-    const s = candidate.symbol.toUpperCase();
-    return ["TLT","IEF","QQQ","XLF","KRE","JPM","BAC","MS","GS","SMH"].includes(s) || candidate.theme === "rates";
-  }
+  const out = [];
+  for (const qq of queries){
+    const url = "https://api.gdeltproject.org/api/v2/doc/doc?"
+      + new URLSearchParams({
+        query: qq.q,
+        mode: "artlist",
+        format: "json",
+        maxrecords: "12",
+        sort: "HybridRel",
+        startdatetime: fmtGDELT(start),
+        enddatetime: fmtGDELT(end)
+      }).toString();
 
-  // =========================
-  // DOM
-  // =========================
-  const $ = (id) => document.getElementById(id);
-
-  const runBtn = $("runBtn");
-  const copyBtn = $("copyBtn");
-  const printBtn = $("printBtn");
-  const logEl = $("log");
-
-  const pillMarket = $("pillMarket");
-  const pillPrices = $("pillPrices");
-  const pillCalendars = $("pillCalendars");
-  const pillNews = $("pillNews");
-
-  const decisionHeadline = $("decisionHeadline");
-  const decisionSub = $("decisionSub");
-  const decisionBadge = $("decisionBadge");
-  const decisionBody = $("decisionBody");
-  const calendarBody = $("calendarBody");
-  const rankedBody = $("rankedBody");
-  const watchlistBody = $("watchlistBody");
-  const rulesBody = $("rulesBody");
-  const timeframeBody = $("timeframeBody");
-  const mathBody = $("mathBody");
-
-  // =========================
-  // Utilities
-  // =========================
-  const fmtUSD = (n) => (Number.isFinite(n) ? n.toLocaleString(undefined,{style:"currency",currency:"USD",maximumFractionDigits:2}) : "—");
-  const fmtNum = (n, d=2) => (Number.isFinite(n) ? n.toFixed(d) : "—");
-  const fmtPct = (n, d=2) => (Number.isFinite(n) ? `${n.toFixed(d)}%` : "—");
-  const clamp = (x,min,max) => Math.max(min, Math.min(max,x));
-
-  function setDot(dotEl, state){
-    dotEl.classList.remove("good","bad","warn");
-    dotEl.classList.add(state);
-  }
-
-  function log(line){
-    const ts = new Date().toISOString().slice(11,19);
-    logEl.textContent += `[${ts}] ${line}\n`;
-    logEl.scrollTop = logEl.scrollHeight;
-  }
-
-  function escapeHTML(str){
-    return String(str ?? "")
-      .replaceAll("&","&amp;")
-      .replaceAll("<","&lt;")
-      .replaceAll(">","&gt;")
-      .replaceAll('"',"&quot;")
-      .replaceAll("'","&#039;");
-  }
-
-  function ymd(date){
-    const y = date.getFullYear();
-    const m = String(date.getMonth()+1).padStart(2,"0");
-    const d = String(date.getDate()).padStart(2,"0");
-    return `${y}-${m}-${d}`;
-  }
-
-  function toGdeltDT(date){
-    // GDELT expects YYYYMMDDHHMMSS
-    const y = date.getUTCFullYear();
-    const m = String(date.getUTCMonth()+1).padStart(2,"0");
-    const d = String(date.getUTCDate()).padStart(2,"0");
-    return `${y}${m}${d}000000`;
-  }
-
-  function nextTradingDays(count=10){
-    const days = [];
-    const d = new Date();
-    d.setHours(0,0,0,0);
-    while(days.length < count){
-      const dow = d.getDay(); // 0 Sun ... 6 Sat
-      if(dow !== 0 && dow !== 6) days.push(new Date(d));
-      d.setDate(d.getDate()+1);
-    }
-    return days;
-  }
-
-  function addTradingDays(startDate, n){
-    const d = new Date(startDate);
-    d.setHours(0,0,0,0);
-    let added = 0;
-    while(added < n){
-      d.setDate(d.getDate()+1);
-      const dow = d.getDay();
-      if(dow !== 0 && dow !== 6) added++;
-    }
-    return d;
-  }
-
-  // =========================
-  // Fetch helpers (CORS-safe-ish)
-  // =========================
-  async function fetchTextDirect(url, headers={}){
-    const res = await fetch(url, { headers, cache:"no-store" });
-    if(!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.text();
-  }
-
-  async function fetchTextAllOrigins(url){
-    const prox = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-    const res = await fetch(prox, { cache:"no-store" });
-    if(!res.ok) throw new Error(`AllOrigins HTTP ${res.status}`);
-    return await res.text();
-  }
-
-  async function fetchTextJina(url){
-    // r.jina.ai will return a text rendering of the target URL.
-    const prox = `https://r.jina.ai/http://${url.replace(/^https?:\/\//,'')}`;
-    const res = await fetch(prox, { cache:"no-store" });
-    if(!res.ok) throw new Error(`Jina HTTP ${res.status}`);
-    return await res.text();
-  }
-
-  async function fetchText(url, headers={}){
-    // Try direct → AllOrigins → Jina
     try{
-      return await fetchTextDirect(url, headers);
-    }catch(e1){
-      try{
-        log(`Direct fetch blocked/failed; proxying via AllOrigins: ${url}`);
-        return await fetchTextAllOrigins(url);
-      }catch(e2){
-        log(`AllOrigins failed; proxying via r.jina.ai: ${url}`);
-        return await fetchTextJina(url);
-      }
-    }
-  }
-
-  async function fetchJSON(url, headers={}){
-    const txt = await fetchText(url, headers);
-    // Jina can include leading lines; attempt to locate JSON start.
-    const i = txt.indexOf("{");
-    const j = txt.lastIndexOf("}");
-    if(i === -1 || j === -1 || j <= i) throw new Error("JSON not found in response");
-    return JSON.parse(txt.slice(i, j+1));
-  }
-
-  // =========================
-  // Data sources (free/open)
-  // =========================
-  async function getNasdaqMarketInfo(){
-    // Documented in multiple places; may require proxy in browser.
-    const url = "https://api.nasdaq.com/api/market-info";
-    const headers = { "accept":"application/json, text/plain, */*" };
-    const json = await fetchJSON(url, headers);
-    return json?.data || null;
-  }
-
-  async function getNasdaqQuote(symbol, assetclass){
-    const url = `https://api.nasdaq.com/api/quote/${encodeURIComponent(symbol)}/info?assetclass=${encodeURIComponent(assetclass)}`;
-    const headers = { "accept":"application/json, text/plain, */*" };
-    const json = await fetchJSON(url, headers);
-    return json?.data || null;
-  }
-
-  async function getNasdaqEarningsCalendar(dateStr){
-    const url = `https://api.nasdaq.com/api/calendar/earnings?date=${encodeURIComponent(dateStr)}`;
-    const headers = { "accept":"application/json, text/plain, */*" };
-    const json = await fetchJSON(url, headers);
-    return json?.data?.rows || [];
-  }
-
-  async function getNasdaqEconomicCalendar(dateStr){
-    // This endpoint exists on many deployments of Nasdaq calendars but can be brittle.
-    // If it fails, we treat macro calendar as unavailable and bias NO TRADE unless other scheduled catalysts exist.
-    const url = `https://api.nasdaq.com/api/calendar/economic?date=${encodeURIComponent(dateStr)}`;
-    const headers = { "accept":"application/json, text/plain, */*" };
-    const json = await fetchJSON(url, headers);
-    return json?.data?.rows || [];
-  }
-
-  async function getStooqDaily(symbol){
-    // Daily history CSV: date,open,high,low,close,volume
-    // For US names: stooq uses lowercase with .us suffix.
-    const sym = symbol.toLowerCase() + ".us";
-    const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(sym)}&i=d`;
-    const txt = await fetchText(url);
-    const lines = txt.trim().split(/\r?\n/);
-    if(lines.length < 3) throw new Error("Stooq: not enough rows");
-    const header = lines[0].split(",");
-    const rows = lines.slice(1).map(l => l.split(","));
-    const idx = (name) => header.indexOf(name);
-    const parsed = rows.map(r => ({
-      date: r[idx("Date")],
-      open: +r[idx("Open")],
-      high: +r[idx("High")],
-      low:  +r[idx("Low")],
-      close:+r[idx("Close")],
-      volume:+r[idx("Volume")]
-    })).filter(x => x.date && Number.isFinite(x.close));
-    if(parsed.length < 30) throw new Error("Stooq: insufficient history");
-    return parsed;
-  }
-
-  async function getGdeltTimelineVolRaw(query, startUtc, endUtc){
-    const url = "https://api.gdeltproject.org/api/v2/doc/doc"
-      + `?query=${encodeURIComponent(query)}`
-      + `&mode=timelinevolraw&format=json`
-      + `&startdatetime=${encodeURIComponent(toGdeltDT(startUtc))}`
-      + `&enddatetime=${encodeURIComponent(toGdeltDT(endUtc))}`
-      + `&timelinesmooth=0`;
-    const json = await fetchJSON(url);
-    const timeline = json?.timeline || [];
-    // timeline entries often have "date" and "value" (raw count) plus "norm"
-    return timeline.map(t => ({
-      date: t.date,
-      value: Number(t.value ?? t.value_raw ?? t.raw ?? t.count ?? 0)
-    }));
-  }
-
-  function mean(arr){ return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : NaN; }
-  function stdev(arr){
-    if(arr.length < 2) return NaN;
-    const m = mean(arr);
-    const v = arr.reduce((a,b)=>a+Math.pow(b-m,2),0)/(arr.length-1);
-    return Math.sqrt(v);
-  }
-
-  // =========================
-  // Technical metrics
-  // =========================
-  function sma(values, n){
-    if(values.length < n) return NaN;
-    const slice = values.slice(values.length-n);
-    return mean(slice);
-  }
-
-  function atrPct(bars, n=14){
-    if(bars.length < n+1) return NaN;
-    const slice = bars.slice(- (n+1));
-    const trs = [];
-    for(let i=1;i<slice.length;i++){
-      const prevClose = slice[i-1].close;
-      const hi = slice[i].high;
-      const lo = slice[i].low;
-      const tr = Math.max(hi-lo, Math.abs(hi-prevClose), Math.abs(lo-prevClose));
-      trs.push(tr);
-    }
-    const atr = mean(trs);
-    const lastClose = bars[bars.length-1].close;
-    return (atr / lastClose) * 100;
-  }
-
-  function returnPct(bars, days){
-    if(bars.length < days+1) return NaN;
-    const a = bars[bars.length-1].close;
-    const b = bars[bars.length-1-days].close;
-    return ((a-b)/b)*100;
-  }
-
-  // =========================
-  // Core scoring per V2.1
-  // =========================
-  function extensionPct(current, dLow){
-    return ((current - dLow) / dLow) * 100;
-  }
-
-  function trendScore(bars){
-    const closes = bars.map(b=>b.close);
-    const sma20 = sma(closes, 20);
-    const sma5  = sma(closes, 5);
-    const last  = closes[closes.length-1];
-
-    // 0–2
-    if(!Number.isFinite(sma20) || !Number.isFinite(sma5)) return 0;
-    if(last > sma20 && sma5 > sma20) return 2;
-    if(last > sma20) return 1;
-    return 0;
-  }
-
-  function tradabilityScore(bars, type){
-    const vols = bars.slice(-20).map(b=>b.volume).filter(v=>Number.isFinite(v));
-    const av = mean(vols);
-    if(!Number.isFinite(av)) return 0;
-    const thresh2 = (type === "ETF") ? 1_000_000 : 2_000_000;
-    const thresh1 = (type === "ETF") ? 300_000 : 600_000;
-    if(av >= thresh2) return 2;
-    if(av >= thresh1) return 1;
-    return 0;
-  }
-
-  function riskContainmentScore(extPct, atrp, type){
-    // 0–2
-    const atrGood = (type==="ETF") ? 3.0 : 4.5;
-    if(!Number.isFinite(atrp)) return 0;
-    if(extPct <= 1.0 && atrp <= atrGood) return 2;
-    if(extPct <= 1.5) return 1;
-    return 0;
-  }
-
-  function timingClarityScore(hasScheduled, hasBinary){
-    // 0–2
-    if(hasBinary) return 2;
-    if(hasScheduled) return 1;
-    return 0;
-  }
-
-  function surpriseScoreFromZ(z){
-    // 0–2
-    if(!Number.isFinite(z)) return 0;
-    if(z >= 1.5) return 2;
-    if(z >= 0.75) return 1;
-    return 0;
-  }
-
-  function isBinaryMacroEvent(evtName){
-    const s = String(evtName || "");
-    return BINARY_MACRO_KEYWORDS.some(k => s.toLowerCase().includes(k.toLowerCase()));
-  }
-
-  // =========================
-  // Rendering
-  // =========================
-  function renderRulesGateSummary(selected){
-    const html = `
-      <div class="smallMuted">
-        <div class="tag pass">Price Sanity Gate FIRST</div>
-        <div class="tag">Extension limits: ETF > +${EXTENSION_LIMIT.ETF}% disqualify • Stock > +${EXTENSION_LIMIT.STOCK}% disqualify</div>
-        <div class="tag bin">Binary guardrail: if binary catalyst ahead AND extension > +${BINARY_GUARD_EXTENSION}% → WATCHLIST ONLY</div>
-      </div>
-      <div class="hr"></div>
-      ${selected ? `
-        <div class="kv">
-          <div class="k">
-            <div class="label">Instrument</div>
-            <div class="val">${escapeHTML(selected.symbol)} (${escapeHTML(selected.type)})</div>
-          </div>
-          <div class="k">
-            <div class="label">Gate result</div>
-            <div class="val">${selected.gateLabel}</div>
-          </div>
-          <div class="k">
-            <div class="label">Current price used</div>
-            <div class="val">${fmtUSD(selected.current)}</div>
-          </div>
-          <div class="k">
-            <div class="label">D-Low (reference low)</div>
-            <div class="val">${fmtUSD(selected.dLow)}</div>
-          </div>
-          <div class="k">
-            <div class="label">Extension %</div>
-            <div class="val">${fmtPct(selected.extension)}</div>
-          </div>
-          <div class="k">
-            <div class="label">Binary catalyst ahead?</div>
-            <div class="val">${selected.hasBinary ? `<span class="warn">YES</span>` : `<span class="good">NO</span>`}</div>
-          </div>
-        </div>
-      ` : `<div class="smallMuted">Run the agent to populate gate results.</div>`}
-    `;
-    rulesBody.innerHTML = html;
-  }
-
-  function renderTimeframe(trade){
-    if(!trade){
-      timeframeBody.innerHTML = `
-        <div class="smallMuted">
-          Horizon: weeks → months. Default operating mode: EOD confirmation (one decision per day).
-          <div class="hr"></div>
-          No active trade. If a trade is proposed, this box will show the mandatory time stop and management rules.
-        </div>
-      `;
-      return;
-    }
-    timeframeBody.innerHTML = `
-      <ul class="list">
-        <li><b>Horizon:</b> weeks to months</li>
-        <li><b>Low-touch mode:</b> decisions once per day after US close (unless Intraday mode selected)</li>
-        <li><b>Mandatory time stop:</b> exit at market on <span class="mono">${escapeHTML(trade.timeStopDate)}</span> (close) if neither TP nor SL hit</li>
-        <li><b>Forbidden actions:</b> no averaging down, no widening stops, no adding capital mid-trade</li>
-      </ul>
-    `;
-  }
-
-  function renderMath(trade, capital){
-    if(!trade){
-      mathBody.innerHTML = `<div class="smallMuted">No trade → no entry/size math is permitted.</div>`;
-      return;
-    }
-
-    const entry = trade.entry;
-    const shares = trade.shares;
-    const notional = entry * shares;
-    const tp = trade.takeProfit;
-    const sl = trade.stopLoss;
-
-    const feeBuy = FEES_PER_ORDER_USD;
-    const feeSell = FEES_PER_ORDER_USD;
-    const feesTotal = feeBuy + feeSell;
-
-    const grossGain = (tp - entry) * shares;
-    const tax = Math.max(0, grossGain - feesTotal) * TAX_RATE; // tax on net gains (simplified)
-    const netGain = grossGain - feesTotal - tax;
-
-    const grossLoss = (entry - sl) * shares;
-    const netLoss = -(grossLoss + feesTotal); // tax not applied on losses
-
-    mathBody.innerHTML = `
-      <div class="smallMuted">
-        Assumptions: ${fmtUSD(FEES_PER_ORDER_USD)} per executed order • 2 orders (buy+sell) • 25% capital gains tax on gains only.
-      </div>
-      <div class="hr"></div>
-      <div class="kv">
-        <div class="k">
-          <div class="label">Capital (input)</div>
-          <div class="val">${fmtUSD(capital)}</div>
-        </div>
-        <div class="k">
-          <div class="label">Entry (limit)</div>
-          <div class="val">${fmtUSD(entry)}</div>
-        </div>
-        <div class="k">
-          <div class="label">Shares</div>
-          <div class="val">${shares.toLocaleString()}</div>
-        </div>
-        <div class="k">
-          <div class="label">Notional</div>
-          <div class="val">${fmtUSD(notional)}</div>
-        </div>
-        <div class="k">
-          <div class="label">Take-profit</div>
-          <div class="val">${fmtUSD(tp)}</div>
-        </div>
-        <div class="k">
-          <div class="label">Stop-loss</div>
-          <div class="val">${fmtUSD(sl)}</div>
-        </div>
-      </div>
-      <div class="hr"></div>
-      <div class="tableWrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Scenario</th>
-              <th>Gross P/L</th>
-              <th>Fees (buy+sell)</th>
-              <th>Tax (25% of net gains)</th>
-              <th><b>Net P/L</b></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><b>TP hits</b></td>
-              <td class="mono">${fmtUSD(grossGain)}</td>
-              <td class="mono">-${fmtUSD(feesTotal)}</td>
-              <td class="mono">-${fmtUSD(tax)}</td>
-              <td class="mono good"><b>${fmtUSD(netGain)}</b></td>
-            </tr>
-            <tr>
-              <td><b>SL hits</b></td>
-              <td class="mono">-${fmtUSD(grossLoss)}</td>
-              <td class="mono">-${fmtUSD(feesTotal)}</td>
-              <td class="mono">—</td>
-              <td class="mono bad"><b>${fmtUSD(netLoss)}</b></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    `;
-  }
-
-  function renderCalendar(cal){
-    if(!cal || (!cal.economicOk && !cal.earningsOk)){
-      calendarBody.innerHTML = `<div class="bad">Scheduled catalysts unavailable → per mandate, biasing to NO TRADE (Watchlist mode).</div>`;
-      return;
-    }
-
-    const econRows = (cal.economic || []).slice(0, 14);
-    const earnRows = (cal.earnings || []).slice(0, 14);
-
-    const econTable = econRows.length ? `
-      <h3>Macro / Policy (Nasdaq calendar if available)</h3>
-      <div class="tableWrap">
-        <table>
-          <thead><tr><th>Date</th><th>Event</th><th>Country</th><th>Time</th><th>Impact</th></tr></thead>
-          <tbody>
-            ${econRows.map(r => `
-              <tr>
-                <td class="mono">${escapeHTML(r.date || "—")}</td>
-                <td>${escapeHTML(r.event || r.title || "—")}</td>
-                <td>${escapeHTML(r.country || "—")}</td>
-                <td class="mono">${escapeHTML(r.time || "—")}</td>
-                <td>${escapeHTML(r.impact || r.importance || "—")}</td>
-              </tr>`).join("")}
-          </tbody>
-        </table>
-      </div>
-    ` : `<div class="smallMuted">No macro items returned for the window (or endpoint unavailable).</div>`;
-
-    const earnTable = earnRows.length ? `
-      <h3>Earnings (Nasdaq earnings calendar)</h3>
-      <div class="tableWrap">
-        <table>
-          <thead><tr><th>Date</th><th>Symbol</th><th>Company</th><th>Time</th><th>EPS (Est)</th></tr></thead>
-          <tbody>
-            ${earnRows.map(r => `
-              <tr>
-                <td class="mono">${escapeHTML(r.date || cal.dateMap?.[r.symbol] || "—")}</td>
-                <td class="mono"><b>${escapeHTML(r.symbol || "—")}</b></td>
-                <td>${escapeHTML(r.company || r.companyName || "—")}</td>
-                <td>${escapeHTML(r.time || r.timeOfDay || "—")}</td>
-                <td class="mono">${escapeHTML(r.epsForecast || r.epsEstimate || "—")}</td>
-              </tr>`).join("")}
-          </tbody>
-        </table>
-      </div>
-    ` : `<div class="smallMuted">No earnings items returned for the window (or endpoint unavailable).</div>`;
-
-    calendarBody.innerHTML = econTable + `<div class="hr"></div>` + earnTable;
-  }
-
-  function renderRankedList(items){
-    if(!items || !items.length){
-      rankedBody.innerHTML = `<div class="smallMuted">No scorable candidates (either prices missing, or extension gate disqualified everything).</div>`;
-      return;
-    }
-    const top = items.slice(0, 7);
-    rankedBody.innerHTML = `
-      <div class="tableWrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Rank</th>
-              <th>Instrument</th>
-              <th>Score</th>
-              <th>Why would this move in weeks (not years)?</th>
-              <th>Next catalyst(s)</th>
-              <th>Gate</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${top.map((x,i) => `
-              <tr>
-                <td class="mono">${i+1}</td>
-                <td><b class="mono">${escapeHTML(x.symbol)}</b> <span class="muted">(${escapeHTML(x.type)})</span><div class="muted">${escapeHTML(x.name||"")}</div></td>
-                <td class="mono"><b>${x.score}</b>/10</td>
-                <td>${escapeHTML(x.whyWeeks || "—")}</td>
-                <td>${(x.catalysts || []).slice(0,3).map(c => `<div class="tag ${c.isBinary?'bin':''} ${c.isHighImpact?'hi':''}">${escapeHTML(c.label)}</div>`).join("") || "—"}</td>
-                <td>${x.gateLabel}</td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
-      </div>
-    `;
-  }
-
-  function renderWatchlist(list){
-    if(!list || !list.length){
-      watchlistBody.innerHTML = `<div class="smallMuted">No watchlist items.</div>`;
-      return;
-    }
-    const top = list.slice(0, 6);
-    watchlistBody.innerHTML = `
-      <div class="tableWrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Instrument</th>
-              <th>Reason (why NO TRADE)</th>
-              <th>Activation triggers (allowed)</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${top.map(x => `
-              <tr>
-                <td><b class="mono">${escapeHTML(x.symbol)}</b> <span class="muted">(${escapeHTML(x.type)})</span><div class="muted">${escapeHTML(x.name||"")}</div></td>
-                <td>${escapeHTML(x.watchReason || "—")}</td>
-                <td>
-                  ${(x.triggers || []).map(t => `<div class="mono">${escapeHTML(t)}</div>`).join("") || "—"}
-                </td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
-      </div>
-    `;
-  }
-
-  function renderDecision(decision){
-    if(decision.kind === "TRADE"){
-      decisionBadge.className = "decisionBadge trade";
-      decisionBadge.textContent = "TRADE";
-      decisionHeadline.textContent = `${decision.trade.symbol} — LONG (LIMIT-ONLY)`;
-      decisionSub.textContent = decision.trade.simpleRationale;
-      decisionBody.innerHTML = `
-        <div class="kv">
-          <div class="k">
-            <div class="label">Entry (BUY LIMIT)</div>
-            <div class="val">${fmtUSD(decision.trade.entry)}</div>
-          </div>
-          <div class="k">
-            <div class="label">Shares</div>
-            <div class="val">${decision.trade.shares.toLocaleString()}</div>
-          </div>
-          <div class="k">
-            <div class="label">Take-Profit</div>
-            <div class="val">${fmtUSD(decision.trade.takeProfit)}</div>
-          </div>
-          <div class="k">
-            <div class="label">Stop-Loss</div>
-            <div class="val">${fmtUSD(decision.trade.stopLoss)}</div>
-          </div>
-          <div class="k">
-            <div class="label">Time Stop (mandatory)</div>
-            <div class="val mono">${escapeHTML(decision.trade.timeStopDate)} (close)</div>
-          </div>
-          <div class="k">
-            <div class="label">Catalyst score</div>
-            <div class="val mono"><b>${decision.trade.score}/10</b> (≥ ${MIN_SCORE_TO_TRADE} required)</div>
-          </div>
-        </div>
-        <div class="hr"></div>
-        <h3>Scenario planning (no certainty language)</h3>
-        <ul class="list">
-          <li><b>Base case:</b> ${escapeHTML(decision.trade.scenarioBase)}</li>
-          <li><b>Upside surprise:</b> ${escapeHTML(decision.trade.scenarioUp)}</li>
-          <li><b>Downside surprise:</b> ${escapeHTML(decision.trade.scenarioDown)}</li>
-        </ul>
-      `;
-      copyBtn.disabled = false;
-      copyBtn.dataset.payload = decision.copyText;
-    }else{
-      decisionBadge.className = "decisionBadge notrade";
-      decisionBadge.textContent = "NO TRADE";
-      decisionHeadline.textContent = "NO TRADE";
-      decisionSub.textContent = decision.reason;
-      decisionBody.innerHTML = `
-        <div class="smallMuted">
-          Per mandate: <b>Prefer NO TRADE over low-quality setups.</b>
-          <div class="hr"></div>
-          <ul class="list">
-            ${(decision.bullets || []).map(b => `<li>${escapeHTML(b)}</li>`).join("")}
-          </ul>
-        </div>
-      `;
-      copyBtn.disabled = true;
-      copyBtn.dataset.payload = "";
-    }
-  }
-
-  // =========================
-  // Agent run
-  // =========================
-  async function runAgent(){
-    logEl.textContent = "";
-    setDot(pillMarket,"warn");
-    setDot(pillPrices,"warn");
-    setDot(pillCalendars,"warn");
-    setDot(pillNews,"warn");
-
-    copyBtn.disabled = true;
-    copyBtn.dataset.payload = "";
-
-    const mode = $("mode").value;
-    const preset = $("preset").value;
-    let capital = Number($("capital").value);
-    capital = clamp(capital, 1000, 2000);
-    $("capital").value = capital;
-
-    const universe = PRESETS[preset] || PRESETS.standard;
-
-    log(`Run started. Mode=${mode}. Universe preset=${preset}. Capital=${capital}.`);
-
-    // 1) Market status (best-effort)
-    let marketInfo = null;
-    let marketOpen = false;
-    try{
-      marketInfo = await getNasdaqMarketInfo();
-      marketOpen = (marketInfo?.mrktStatus || "").toLowerCase() === "open";
-      setDot(pillMarket,"good");
-      log(`Market info: ${marketInfo?.mrktStatus || "unknown"} (Nasdaq).`);
-    }catch(e){
-      setDot(pillMarket,"bad");
-      log(`Market info fetch failed: ${e.message}`);
-    }
-
-    // 2) Scheduled catalysts: next ~10 trading days
-    const days = nextTradingDays(10);
-    const dates = days.map(ymd);
-
-    let earnings = [];
-    let economic = [];
-    let earningsOk = false;
-    let economicOk = false;
-
-    // Earnings calendar
-    try{
-      const out = [];
-      for(const d of dates){
-        const rows = await getNasdaqEarningsCalendar(d);
-        // annotate with date for rendering
-        rows.forEach(r => r.date = r.date || d);
-        out.push(...rows);
-      }
-      earnings = out;
-      earningsOk = true;
-      log(`Earnings calendar pulled: ${earnings.length} rows.`);
-    }catch(e){
-      earningsOk = false;
-      log(`Earnings calendar failed: ${e.message}`);
-    }
-
-    // Economic calendar
-    try{
-      const out = [];
-      for(const d of dates){
-        const rows = await getNasdaqEconomicCalendar(d);
-        rows.forEach(r => r.date = r.date || d);
-        out.push(...rows);
-      }
-      economic = out;
-      economicOk = true;
-      log(`Economic calendar pulled: ${economic.length} rows.`);
-    }catch(e){
-      economicOk = false;
-      log(`Economic calendar failed: ${e.message}`);
-    }
-
-    if(earningsOk || economicOk) setDot(pillCalendars,"good");
-    else setDot(pillCalendars,"bad");
-
-    // If we cannot fetch ANY scheduled catalysts, we must bias NO TRADE
-    const scheduledIntelAvailable = (earningsOk || economicOk);
-
-    // Build earnings map by symbol
-    const earningsMap = new Map();
-    if(earningsOk){
-      for(const row of earnings){
-        const sym = String(row.symbol || "").toUpperCase();
-        if(!sym) continue;
-        // keep earliest date if multiple
-        if(!earningsMap.has(sym)){
-          earningsMap.set(sym, { date: row.date, time: row.time || row.timeOfDay || "—", company: row.company || row.companyName || "" });
-        }
-      }
-    }
-
-    // 3) News attention proxy (GDELT) by theme
-    const themeZ = {};
-    try{
-      const end = new Date();
-      const start60 = new Date(end); start60.setUTCDate(start60.getUTCDate() - 60);
-      const start7  = new Date(end); start7.setUTCDate(start7.getUTCDate() - 7);
-
-      for(const theme of Object.keys(THEME_QUERIES)){
-        const q = THEME_QUERIES[theme];
-        const tl = await getGdeltTimelineVolRaw(q, start60, end);
-        const values = tl.map(x => x.value).filter(v => Number.isFinite(v));
-        const baseMean = mean(values);
-        const baseSd = stdev(values);
-
-        // last 7 days mean (approx: last 7 points)
-        const last7 = values.slice(-7);
-        const last7m = mean(last7);
-
-        const z = (Number.isFinite(baseSd) && baseSd > 0) ? ((last7m - baseMean) / baseSd) : NaN;
-        themeZ[theme] = z;
-
-        log(`GDELT theme=${theme}: z=${Number.isFinite(z)?z.toFixed(2):"NA"} (last7 vs 60d).`);
-      }
-      setDot(pillNews,"good");
-    }catch(e){
-      setDot(pillNews,"bad");
-      log(`GDELT timeline failed: ${e.message}`);
-    }
-
-    // 4) Price sanity gate + scoring (NO scoring for disqualified)
-    const scorable = [];
-    const watchlist = [];
-
-    let pricesOkCount = 0;
-
-    for(const cand of universe){
-      const symbol = cand.symbol.toUpperCase();
-      const type = cand.type;
-      const assetclass = (type === "ETF") ? "etf" : "stocks";
-
-      let bars = null;
-      let current = NaN;
-      let dLow = NaN;
-      let priceSource = "—";
-
-      // Pull daily bars (Stooq fallback) for D-Low and technical metrics
-      try{
-        bars = await getStooqDaily(symbol);
-      }catch(e){
-        bars = null;
-        log(`${symbol}: Stooq daily fetch failed: ${e.message}`);
-      }
-
-      if(bars){
-        const last = bars[bars.length-1];
-        dLow = last.low;                 // "most recent valid EOD reference low" (practical daily proxy)
-        const lastClose = last.close;
-
-        // Current price: if intraday mode AND market open, try Nasdaq live quote
-        if(mode === "intraday" && marketOpen){
-          try{
-            const q = await getNasdaqQuote(symbol, assetclass);
-            const lastSale = q?.primaryData?.lastSalePrice;
-            current = Number(String(lastSale || "").replace(/[^0-9.]/g,""));
-            if(Number.isFinite(current)) priceSource = "Nasdaq live quote";
-            else current = lastClose;
-          }catch(e){
-            current = lastClose;
-          }
-        } else {
-          current = lastClose;
-          priceSource = "Stooq daily close";
-        }
-      }
-
-      // PRICE SANITY GATE: validation
-      if(!Number.isFinite(current) || !Number.isFinite(dLow) || dLow <= 0){
-        watchlist.push({
-          ...cand,
-          symbol,
-          gateLabel: `<span class="bad">PRICE UNKNOWN — NO TRADE</span>`,
-          watchReason: "PRICE UNKNOWN — could not confidently verify current price and/or D-Low.",
-          triggers: ["Fetch valid price data, then re-run Price Sanity Gate."]
-        });
-        continue;
-      }
-
-      pricesOkCount++;
-
-      const ext = extensionPct(current, dLow);
-      const extLimit = EXTENSION_LIMIT[type];
-
-      // Hard disqualification (extension)
-      if(ext > extLimit){
-        const pullback = dLow * (1 + 0.005); // require near D-Low +0.5% as activation
-        watchlist.push({
-          ...cand,
-          symbol,
-          current, dLow, extension: ext,
-          gateLabel: `<span class="bad">DISQUALIFIED (EXTENDED)</span>`,
-          watchReason: `Hard disqualification: Extension ${fmtPct(ext)} > +${extLimit}%`,
-          triggers: [
-            `Pullback activation: price ≤ ${fmtUSD(pullback)} (≈ D-Low +0.5%)`,
-            `OR post-catalyst: re-run after EOD close if extension ≤ +${fmtNum(extLimit)}%`
-          ]
-        });
-        continue;
-      }
-
-      // Identify catalysts relevant to this instrument
-      const catalysts = [];
-
-      // Earnings as binary catalyst
-      let hasEarnings = false;
-      const earn = earningsMap.get(symbol);
-      if(earn){
-        hasEarnings = true;
-        catalysts.push({
-          label: `Earnings (${earn.date}, ${earn.time})`,
-          isBinary: true,
-          isHighImpact: true
-        });
-      }
-
-      // Macro events as binary if macro-sensitive
-      let hasMacro = false;
-      let hasBinaryMacro = false;
-      if(economicOk && macroSensitive(cand)){
-        // find next 1–3 macro events that match our binary macro keywords
-        const relevant = economic
-          .map(r => ({...r, eventName: r.event || r.title || ""}))
-          .filter(r => isBinaryMacroEvent(r.eventName))
-          .slice(0, 3);
-
-        if(relevant.length){
-          hasMacro = true;
-          hasBinaryMacro = true; // treat as binary for macro-sensitive instruments
-          relevant.forEach(r => catalysts.push({
-            label: `${(r.event || r.title || "Macro")} (${r.date || "—"})`,
-            isBinary: true,
-            isHighImpact: true
-          }));
-        }
-      }
-
-      const hasScheduled = hasEarnings || hasMacro;
-      const hasBinary = hasEarnings || hasBinaryMacro;
-
-      // Binary Catalyst Guardrail
-      if(hasBinary && ext > BINARY_GUARD_EXTENSION){
-        const pullback = dLow * (1 + 0.004);
-        watchlist.push({
-          ...cand,
-          symbol,
-          current, dLow, extension: ext,
-          gateLabel: `<span class="warn">WATCHLIST ONLY (BINARY + EXTENDED)</span>`,
-          watchReason: `Binary catalyst ahead AND extension ${fmtPct(ext)} > +${BINARY_GUARD_EXTENSION}%`,
-          triggers: [
-            `Pre-event pullback: price ≤ ${fmtUSD(pullback)} (≈ D-Low +0.4%)`,
-            `Post-event: re-run after EOD close; only scorable if extension ≤ +${fmtNum(EXTENSION_LIMIT[type])}%`
-          ]
-        });
-        continue;
-      }
-
-      // Now scorable (passed Price Sanity Gate)
-      const atrp = atrPct(bars, 14);
-      const tScore = trendScore(bars);
-      const trScore = tradabilityScore(bars, type);
-      const rcScore = riskContainmentScore(ext, atrp, type);
-      const tiScore = timingClarityScore(hasScheduled, hasBinary);
-      const z = themeZ[cand.theme];
-      const spScore = surpriseScoreFromZ(z);
-
-      const score = tiScore + spScore + trScore + tScore + rcScore;
-
-      // "Why weeks not years?" – keep non-trader friendly
-      const whyWeeks = hasBinary
-        ? "A time-bounded, binary catalyst is near; that’s what moves price on the weeks horizon."
-        : (hasScheduled
-          ? "A scheduled catalyst window exists soon; price reaction tends to compress into days/weeks."
-          : "No clear dated catalyst; without timing, this is unlikely to move on the required horizon.");
-
-      scorable.push({
-        ...cand,
-        symbol,
-        current, dLow, extension: ext,
-        atrp, trend: tScore, tradability: trScore, risk: rcScore,
-        score,
-        catalysts,
-        hasBinary,
-        hasScheduled,
-        whyWeeks,
-        gateLabel: `<span class="good">PASS</span>`,
-        scoreBreakdown: { tiScore, spScore, trScore, tScore, rcScore }
-      });
-    }
-
-    if(pricesOkCount > 0) setDot(pillPrices,"good");
-    else setDot(pillPrices,"bad");
-
-    // 5) Rank scorable candidates
-    scorable.sort((a,b) => b.score - a.score);
-
-    // 6) Decide ONE TRADE or NO TRADE
-    let decision = null;
-    let selected = null;
-
-    if(!scheduledIntelAvailable){
-      decision = {
-        kind: "NO_TRADE",
-        reason: "Scheduled catalyst intel unavailable (calendar fetch failed). Mandate requires a fresh INTEL PULL; biasing to NO TRADE.",
-        bullets: [
-          "Calendars could not be fetched confidently (macro and earnings).",
-          "Price data may still be present, but without dated catalysts the edge is not verifiable.",
-          "Watchlist triggers provided where possible."
-        ]
-      };
-    } else {
-      // Filter to those with score >= threshold and with at least a scheduled catalyst
-      const eligible = scorable.filter(x => x.score >= MIN_SCORE_TO_TRADE && x.hasScheduled);
-
-      if(!eligible.length){
-        decision = {
-          kind: "NO_TRADE",
-          reason: `No setup meets quality bar (score ≥ ${MIN_SCORE_TO_TRADE} AND a dated catalyst) while passing guardrails.`,
-          bullets: [
-            "Either catalysts are weak / non-dated, or surprise proxy is low, or trend/risk containment is insufficient.",
-            "Per process: prefer NO TRADE over forcing a narrative setup.",
-            "See Watchlist for activation triggers."
-          ]
+      const j = await fetchJSON(url);
+      const arts = (j && j.articles) ? j.articles : [];
+      const top = arts.slice(0,6).map(a=>{
+        const title = a.title || qq.key;
+        const dt = a.seendate ? parseGDELTSeenDate(a.seendate) : null;
+        return {
+          title: title,
+          dt: dt || end,
+          source: "GDELT",
+          kind: qq.key,
+          importance: "Normal",
+          binary: false,
+          themes: themesFromTitle(title),
+          url: a.url || ""
         };
-      } else {
-        selected = eligible[0];
+      });
 
-        // Build trade (limit-only). Keep disciplined and simple.
-        const isETF = selected.type === "ETF";
-        const entry = selected.current * (isETF ? 0.995 : 0.99);
-        const shares = Math.floor(capital / entry);
-
-        if(shares < 1){
-          decision = {
-            kind: "NO_TRADE",
-            reason: "Ticket size constraint: capital too small vs entry price to buy ≥ 1 share within rules.",
-            bullets: ["Increase capital (within $1,000–$2,000) or choose a lower-priced instrument."]
-          };
-        } else {
-          const takeProfit = entry * (1 + (isETF ? TARGET_UPSIDE.ETF : TARGET_UPSIDE.STOCK));
-          const stopLoss   = entry * (1 - (isETF ? STOP_LOSS.ETF : STOP_LOSS.STOCK));
-
-          const timeStop = addTradingDays(new Date(), TIME_STOP_TRADING_DAYS);
-
-          const catalystText = (selected.catalysts || []).slice(0,2).map(c => c.label).join(" + ");
-          const simpleRationale =
-            `Chosen because it passes the price gate and has a near-term catalyst (${catalystText || "scheduled window"}) with a high catalyst score (${selected.score}/10).`;
-
-          // Scenario planning (simple, non-certain)
-          const scenarioBase = "Catalyst prints near expectations → modest sector follow-through → trade works if price holds above the stop.";
-          const scenarioUp = "Upside surprise / escalation → fast re-rating in the theme → higher odds of reaching take-profit within weeks.";
-          const scenarioDown = "Downside surprise / risk-off → sector sells off → stop-loss protects capital; reassess only after EOD confirmation.";
-
-          const trade = {
-            symbol: selected.symbol,
-            type: selected.type,
-            name: selected.name,
-            score: selected.score,
-            entry: round2(entry),
-            shares,
-            takeProfit: round2(takeProfit),
-            stopLoss: round2(stopLoss),
-            timeStopDate: ymd(timeStop),
-            simpleRationale,
-            scenarioBase,
-            scenarioUp,
-            scenarioDown,
-            priceSource: selected.priceSource
-          };
-
-          // Copyable trade card
-          const copyText =
-`ONE TRADE (EVENT-DRIVEN) — LONG (LIMIT ONLY)
-Ticker: ${trade.symbol} (${trade.type})
-Entry (BUY LIMIT): $${trade.entry.toFixed(2)}
-Size: ${trade.shares} shares (~$${(trade.entry*trade.shares).toFixed(2)} notional)
-Take-Profit: $${trade.takeProfit.toFixed(2)}
-Stop-Loss: $${trade.stopLoss.toFixed(2)}
-Time Stop: Exit at market on ${trade.timeStopDate} (close) if neither TP nor SL hit
-Fees: $${FEES_PER_ORDER_USD} per order (buy+sell = $${(FEES_PER_ORDER_USD*2).toFixed(2)})
-Tax: 25% on gains (Israel)`;
-
-          decision = { kind:"TRADE", trade, copyText };
-        }
+      // Add ONE summarized “cluster” item + a few examples
+      if(top.length){
+        out.push({
+          title: `${qq.key} pulse — ${top.length} notable items (last ${hours}h)`,
+          dt: end,
+          source:"GDELT",
+          kind: qq.key,
+          importance:"Normal",
+          binary:false,
+          themes: [qq.key.toLowerCase()],
+          examples: top
+        });
       }
-    }
-
-    // 7) Render
-    // Pills: calendars/news status already set; prices set above
-    renderCalendar({
-      economicOk,
-      earningsOk,
-      economic,
-      earnings,
-      dateMap: null
-    });
-
-    // Only scorable list shown; disqualified not ranked
-    renderRankedList(scorable.map(x => ({
-      ...x,
-      gateLabel: x.gateLabel
-    })));
-
-    renderWatchlist(watchlist);
-
-    // Rules box: show selected if trade
-    if(decision.kind === "TRADE"){
-      const selectedForRules = scorable.find(x => x.symbol === decision.trade.symbol);
-      if(selectedForRules){
-        selectedForRules.gateLabel = `<span class="good">PASS</span>`;
-      }
-      renderRulesGateSummary(selectedForRules || null);
-      renderTimeframe(decision.trade);
-      renderMath(decision.trade, capital);
-      renderDecision(decision);
-    } else {
-      renderRulesGateSummary(null);
-      renderTimeframe(null);
-      renderMath(null, capital);
-      renderDecision(decision);
-    }
-
-    // Final log summary
-    log(`Scorable candidates: ${scorable.length}. Watchlist items: ${watchlist.length}.`);
-    log(`Decision: ${decision.kind}.`);
-
-    // Update badge pills based on actual success
-    if(!scheduledIntelAvailable){
-      setDot(pillCalendars,"bad");
+    }catch{
+      // ignore per-query; caller will handle source status
+      throw new Error("GDELT fetch failed");
     }
   }
 
-  function round2(x){ return Math.round(x*100)/100; }
+  return out;
+}
 
-  // Copy
-  copyBtn.addEventListener("click", async () => {
-    const payload = copyBtn.dataset.payload || "";
-    if(!payload) return;
+// 5) Cyber: CISA advisories RSS (keyless)
+async function fetchCISARSS(nextDays=14){
+  const url = "https://www.cisa.gov/cybersecurity-advisories/all.xml";
+  const xml = await fetchText(url);
+  const doc = new DOMParser().parseFromString(xml, "text/xml");
+  const items = Array.from(doc.querySelectorAll("item"));
+  const now = new Date();
+  const from = addDays(now, -nextDays);
+
+  const out = items.map(it=>{
+    const title = textOf(it, "title");
+    const link = textOf(it, "link");
+    const pub = textOf(it, "pubDate");
+    const dt = pub ? new Date(pub) : null;
+    return {
+      title: `CISA: ${title}`,
+      dt,
+      source:"CISA RSS",
+      kind:"Cyber",
+      importance:"Normal",
+      binary:false,
+      themes: ["cyber"],
+      url: link
+    };
+  }).filter(x=>x.dt && x.dt>=from).sort((a,b)=>b.dt-a.dt).slice(0,8);
+
+  return out;
+}
+
+// 6) Disasters: USGS earthquakes feed (keyless)
+async function fetchUSGSEarthquakes(){
+  const url = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_week.geojson";
+  const j = await fetchJSON(url);
+  const feats = (j && j.features) ? j.features : [];
+  const out = feats.slice(0,8).map(f=>{
+    const p = f.properties || {};
+    const title = p.title || "Significant earthquake";
+    const dt = p.time ? new Date(p.time) : null;
+    return {
+      title: `USGS: ${title}`,
+      dt,
+      source:"USGS",
+      kind:"Disasters",
+      importance: (p.mag>=6.5) ? "High" : "Normal",
+      binary:false,
+      themes:["disasters"],
+      url: p.url || ""
+    };
+  }).filter(x=>x.dt).sort((a,b)=>b.dt-a.dt);
+
+  return out;
+}
+
+/* ============
+   Prices (keyless): Stooq
+   - Current: quote endpoint (intraday/delayed)
+   - D-Low: daily history endpoint
+   ============ */
+
+function stooqSymbol(ticker){
+  // Stooq expects lowercase and .us for US stocks/ETFs
+  return ticker.toLowerCase() + ".us";
+}
+async function fetchStooqQuote(ticker){
+  // Example: https://stooq.com/q/l/?s=spy.us&f=sd2t2ohlcv&h&e=csv
+  const s = stooqSymbol(ticker);
+  const url = `https://stooq.com/q/l/?s=${encodeURIComponent(s)}&f=sd2t2ohlcv&h&e=csv`;
+  const csv = await fetchText(url);
+  const rows = parseCSV(csv);
+  // header: Symbol,Date,Time,Open,High,Low,Close,Volume
+  if(rows.length<2) throw new Error("quote csv empty");
+  const r = rows[1];
+  const close = num(r.Close);
+  const dt = (r.Date && r.Time) ? new Date(`${r.Date}T${r.Time}`) : null;
+  return { current: close, ts: dt || new Date(), raw: r };
+}
+async function fetchStooqDaily(ticker, days=90){
+  // Example: https://stooq.com/q/d/l/?s=spy.us&i=d
+  const s = stooqSymbol(ticker);
+  const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(s)}&i=d`;
+  const csv = await fetchText(url);
+  const rows = parseCSV(csv);
+  if(rows.length<5) throw new Error("daily csv empty");
+  // last row is latest trading day
+  const last = rows[rows.length-1];
+  const lastClose = num(last.Close);
+  const dLow = num(last.Low);
+  const volume = num(last.Volume);
+  const date = last.Date ? new Date(last.Date+"T00:00:00") : new Date();
+  return { lastClose, dLow, volume, dt: date, rows };
+}
+
+async function fetchAllPrices(){
+  const out = {};
+  for (const u of UNIVERSE){
     try{
-      await navigator.clipboard.writeText(payload);
-      log("Trade card copied to clipboard.");
+      const [q,d] = await Promise.all([
+        Promise.race([fetchStooqQuote(u.t), timeout(6000)]),
+        Promise.race([fetchStooqDaily(u.t), timeout(8000)])
+      ]);
+      const current = (Number.isFinite(q.current) && q.current>0) ? q.current : d.lastClose;
+      const lastClose = d.lastClose;
+      const dLow = d.dLow;
+      const extPct = (current - dLow) / dLow * 100;
+      out[u.t] = {
+        current, lastClose, dLow, extPct,
+        volume: d.volume,
+        ts: q.ts,
+        ok: Number.isFinite(current) && Number.isFinite(dLow) && dLow>0
+      };
     }catch(e){
-      log("Copy failed (browser permissions).");
-      alert(payload);
+      out[u.t] = { ok:false, err: String(e && e.message ? e.message : e) };
     }
-  });
+  }
+  return out;
+}
 
-  // Print
-  printBtn.addEventListener("click", () => window.print());
+/* ============
+   Decision Engine (faithful to your prompt, but simplified)
+   ============ */
 
-  // Run
-  runBtn.addEventListener("click", async () => {
-    runBtn.disabled = true;
-    try{
-      await runAgent();
-    }finally{
-      runBtn.disabled = false;
+function priceSanityGate(ticker){
+  const u = UNIVERSE.find(x=>x.t===ticker);
+  const p = state.prices[ticker];
+  if(!u || !p || !p.ok) return { ok:false, label:"PRICE UNKNOWN — NO TRADE" };
+
+  const threshold = (u.kind==="ETF") ? RULES.extETF : RULES.extStock;
+  const disq = p.extPct > threshold;
+  if(disq){
+    return { ok:false, disqualified:true, label:`AUTO-DISQUALIFIED (extended ${p.extPct.toFixed(2)}%)` };
+  }
+  return { ok:true, disqualified:false, label:`PASS (extended ${p.extPct.toFixed(2)}%)` };
+}
+
+function buildCandidateCatalysts(){
+  // scheduled: macro + auctions + earnings
+  const sched = state.scheduled.slice();
+  const now = new Date();
+
+  // Build per-ticker list by relevance
+  const per = {};
+  for (const u of UNIVERSE){
+    per[u.t] = [];
+    for (const ev of sched){
+      const rel = relevanceScore(u.t, ev.themes || []);
+      // broad mapping: rates events affect TLT/IEF/XLF and overall risk proxies
+      const isRatesEvent = (ev.themes||[]).includes("rates") || (ev.themes||[]).includes("inflation") || (ev.themes||[]).includes("jobs");
+      const broadOk =
+        (u.t==="TLT" || u.t==="IEF" || u.t==="XLF") ? isRatesEvent :
+        (u.t==="SPY" || u.t==="QQQ") ? (isRatesEvent || (ev.themes||[]).includes("growth")) :
+        false;
+
+      if(rel>0 || broadOk){
+        per[u.t].push({
+          ...ev,
+          relScore: rel + (broadOk ? 1 : 0),
+          daysAway: Math.max(0, Math.round((ev.dt - now) / (24*3600*1000)))
+        });
+      }
     }
-  });
+    per[u.t].sort((a,b)=>a.dt-b.dt);
+  }
+  return per;
+}
 
-  // Initial UI state
-  renderRulesGateSummary(null);
-  renderTimeframe(null);
-  renderMath(null, Number($("capital").value));
-  log("Ready. Click “INTEL PULL → DECIDE ONE TRADE”.");
+function catalystQualityScore(ticker, candEvents){
+  // Score 0–10: timing clarity, surprise potential, tradability, follow-through, risk containment
+  const u = UNIVERSE.find(x=>x.t===ticker);
+  const p = state.prices[ticker];
+  if(!u || !p || !p.ok) return { score:0, parts:{} };
+
+  const now = new Date();
+  const next = (candEvents||[])[0] || null;
+
+  // 1) Timing clarity (0–2)
+  let timing = 0;
+  if(next){
+    timing = next.binary ? 2 : 1;
+  }
+
+  // 2) Surprise potential (0–2) — simplified, transparent:
+  // High impact scheduled events are treated as higher surprise potential.
+  let surprise = 0;
+  if(next){
+    surprise = (next.importance==="High") ? 2 : 1;
+  }
+
+  // 3) Tradability (0–2): approximate using dollar volume
+  const dollarVol = (p.lastClose || p.current) * (p.volume || 0);
+  let trad = 0;
+  if(dollarVol > 5e9) trad = 2;
+  else if(dollarVol > 1e9) trad = 1;
+  else trad = 0;
+
+  // 4) Follow-through (0–2): use "is there a chain of >1 relevant events" + small live trigger support
+  let follow = 0;
+  const chain = (candEvents||[]).filter(e=>e.importance==="High").length;
+  if(chain >= 2) follow = 2;
+  else if(chain === 1) follow = 1;
+
+  // Add at most +1 support if live triggers match the ticker themes
+  const liveSupport = liveSupportForTicker(ticker); // 0 or 1
+  follow = Math.min(2, follow + liveSupport);
+
+  // 5) Risk containment (0–2): closer to D-Low is better; too extended -> already filtered out
+  let risk = 2;
+  if(p.extPct > 1.0) risk = 1;
+  if(p.extPct > 1.5) risk = 0;
+
+  const score = timing + surprise + trad + follow + risk;
+  return { score, parts: { timing, surprise, trad, follow, risk }, next };
+}
+
+function liveSupportForTicker(ticker){
+  const u = UNIVERSE.find(x=>x.t===ticker);
+  if(!u) return 0;
+
+  const themes = new Set(u.theme);
+  // If live contains a pulse cluster of matching category, provide +1 support
+  for (const ev of state.live){
+    const k = (ev.kind||"").toLowerCase();
+    if(k.includes("geopolit") && (themes.has("geopolitics") || themes.has("defense") || themes.has("energy"))) return 1;
+    if(k.includes("regulat") && themes.has("regulation")) return 1;
+    if(k.includes("cyber") && themes.has("cyber")) return 1;
+    if(k.includes("disaster") && themes.has("energy")) return 1;
+  }
+  return 0;
+}
+
+function binaryGuardrail(ticker, candEvents){
+  const u = UNIVERSE.find(x=>x.t===ticker);
+  const p = state.prices[ticker];
+  if(!u || !p || !p.ok) return { watchOnly:true, reason:"PRICE UNKNOWN" };
+
+  const hasBinary = (candEvents||[]).some(e=>e.binary);
+  if(!hasBinary) return { watchOnly:false, reason:"" };
+
+  if(p.extPct > RULES.binaryExtGuard){
+    return { watchOnly:true, reason:`Binary catalyst ahead + already extended (${p.extPct.toFixed(2)}%)` };
+  }
+  return { watchOnly:false, reason:"" };
+}
+
+function chooseOneTrade(){
+  // Intel completeness checks
+  const haveMacro = state.scheduled.some(x=>x.kind==="Macro");
+  const haveAuctions = state.scheduled.some(x=>x.kind==="Auction");
+  const haveAnyScheduled = state.scheduled.length > 0;
+
+  const pricesOkCount = Object.values(state.prices).filter(p=>p && p.ok).length;
+
+  if(!haveAnyScheduled || pricesOkCount < Math.max(6, Math.floor(UNIVERSE.length*0.6))){
+    return {
+      decision:"NO_TRADE",
+      reason: !haveAnyScheduled ? "Scheduled catalyst feed missing" : "Price feed incomplete",
+      desk: buildDeskNoteNoTrade("Intel incomplete: default NO TRADE.")
+    };
+  }
+
+  const per = buildCandidateCatalysts();
+
+  // Apply Price Sanity Gate first
+  const eligible = [];
+  const watchOnly = [];
+
+  for (const u of UNIVERSE){
+    const gate = priceSanityGate(u.t);
+    if(!gate.ok){
+      watchOnly.push({ t:u.t, gate });
+      continue;
+    }
+
+    const guard = binaryGuardrail(u.t, per[u.t]);
+    if(guard.watchOnly){
+      watchOnly.push({ t:u.t, gate, guard });
+      continue;
+    }
+
+    // Require at least one time-bounded catalyst in the next 14 days
+    if(!per[u.t] || per[u.t].length===0){
+      watchOnly.push({ t:u.t, gate, guard: { watchOnly:true, reason:"No time-bounded catalyst mapped in next 14 days" } });
+      continue;
+    }
+
+    const sc = catalystQualityScore(u.t, per[u.t]);
+    eligible.push({ t:u.t, gate, sc, events: per[u.t] });
+  }
+
+  eligible.sort((a,b)=>b.sc.score-a.sc.score);
+
+  const best = eligible[0] || null;
+  if(!best || best.sc.score < RULES.minScore){
+    const reason = best ? `No setup reached score ≥ ${RULES.minScore} (best: ${best.t} scored ${best.sc.score}/10)` : "No eligible setups after gate/guardrails";
+    return {
+      decision:"NO_TRADE",
+      reason,
+      watch: buildWatchlist(per, watchOnly, eligible),
+      desk: buildDeskNoteNoTrade(reason)
+    };
+  }
+
+  // Additional safety: if the next catalyst is within 2 days AND binary, prefer watchlist
+  const next = best.sc.next;
+  const daysAway = next ? Math.round((next.dt - new Date())/(24*3600*1000)) : 999;
+  if(next && next.binary && daysAway <= 2){
+    const reason = `Binary catalyst too close (${daysAway}d): prefer post-event EOD confirmation`;
+    return {
+      decision:"NO_TRADE",
+      reason,
+      watch: buildWatchlist(per, watchOnly, eligible, best.t),
+      desk: buildDeskNoteNoTrade(reason)
+    };
+  }
+
+  // Build trade plan (limit-only)
+  return {
+    decision:"TRADE",
+    pick: best,
+    trade: buildTradeCard(best),
+    desk: buildDeskNoteTrade(best)
+  };
+}
+
+/* ============
+   Trade card + math (fees/tax) — exact numbers
+   ============ */
+function buildTradeCard(best){
+  const s = loadSettings();
+  const u = UNIVERSE.find(x=>x.t===best.t);
+  const p = state.prices[best.t];
+  const entry = computeEntry(best.t);
+  const tpPct = (u.kind==="ETF") ? RULES.tpETF : RULES.tpStock;
+  const slPct = (u.kind==="ETF") ? RULES.slETF : RULES.slStock;
+  const tp = round2(entry * (1+tpPct));
+  const sl = round2(entry * (1-slPct));
+  const shares = Math.max(1, Math.floor(s.cap / entry));
+  const notional = round2(shares * entry);
+
+  // Fees & tax
+  const feeRoundTrip = round2(2 * s.fee);
+  const grossGain = round2((tp - entry) * shares);
+  const grossLoss = round2((entry - sl) * shares);
+  const netGainBeforeTax = round2(grossGain - feeRoundTrip);
+  const taxAmt = round2(Math.max(0, netGainBeforeTax) * (s.tax/100));
+  const netGainAfterTax = round2(netGainBeforeTax - taxAmt);
+  const netLossAfterFees = round2(grossLoss + feeRoundTrip);
+
+  // Time stop date (approx)
+  const timeStop = addDays(new Date(), Math.round(RULES.timeStopTradingDays * 1.4));
+  const catalystWindow = best.events.slice(0,3).map(e=>`${fmtShort(e.dt)} — ${shorten(e.title,52)}`).join(" | ");
+
+  // Sanity gate note
+  const dLow = p.dLow;
+  const extPct = p.extPct;
+
+  return {
+    ticker: best.t,
+    kind: u.kind,
+    score: best.sc.score,
+    scoreParts: best.sc.parts,
+    catalystWindow,
+    entry, tp, sl, shares, notional,
+    feeRoundTrip, grossGain, grossLoss, netGainBeforeTax, taxAmt, netGainAfterTax, netLossAfterFees,
+    timeStop,
+    dLow, current:p.current, extPct
+  };
+}
+
+function computeEntry(ticker){
+  const u = UNIVERSE.find(x=>x.t===ticker);
+  const p = state.prices[ticker];
+  // Simple, explainable pullback entry:
+  // Entry = D-Low + small buffer
+  const buffer = (u.kind==="ETF") ? 0.002 : 0.003;
+  return round2(p.dLow * (1+buffer));
+}
+
+function buildWatchlist(per, watchOnly, eligible, highlightTicker=""){
+  const out = [];
+
+  // include the best near-miss first
+  const sorted = eligible.slice().sort((a,b)=>b.sc.score-a.sc.score);
+  const top = sorted.slice(0,3);
+
+  for (const x of top){
+    const p = state.prices[x.t];
+    const entry = computeEntry(x.t);
+    const next = x.sc.next;
+    const msg = next
+      ? `Next: ${fmtShort(next.dt)} — ${shorten(next.title,60)}`
+      : "Next: (none mapped)";
+    const gateLine = `Gate: PASS, extension ${p.extPct.toFixed(2)}% (Current ${p.current.toFixed(2)} vs D-Low ${p.dLow.toFixed(2)})`;
+    out.push({
+      title: `${x.t} — score ${x.sc.score}/10`,
+      when: msg,
+      why: `Activation: buy-limit ${entry.toFixed(2)} (pullback to D-Low + buffer). ${gateLine}`,
+      tags: ["WATCHLIST","Activation trigger"]
+    });
+  }
+
+  // include disqualified/guardrail tickers (compact)
+  const extra = watchOnly.slice(0,3);
+  for (const w of extra){
+    const p = state.prices[w.t];
+    const entry = (p && p.ok) ? computeEntry(w.t) : null;
+    const why = w.guard && w.guard.reason ? w.guard.reason : (w.gate && w.gate.label ? w.gate.label : "Not eligible");
+    out.push({
+      title: `${w.t} — not eligible now`,
+      when: entry ? `Activation level: ${entry.toFixed(2)}` : "Activation: (price needed)",
+      why: `Reason: ${why}`,
+      tags: ["Guardrail"]
+    });
+  }
+
+  // If we have a highlightTicker (best but blocked), put it first
+  if(highlightTicker){
+    out.sort((a,b)=>{
+      const ah = a.title.startsWith(highlightTicker+" ");
+      const bh = b.title.startsWith(highlightTicker+" ");
+      return (bh?1:0) - (ah?1:0);
+    });
+  }
+
+  return out;
+}
+
+/* ============
+   Desk note (copy/paste)
+   ============ */
+function buildDeskNoteNoTrade(reason){
+  const now = new Date();
+  const lines = [];
+  lines.push(`CATALYST AGENT — DESK NOTE`);
+  lines.push(`${fmtShort(now)} (local)`);
+  lines.push(`Decision: NO TRADE`);
+  lines.push(`Reason: ${reason}`);
+  lines.push("");
+  lines.push(`Upcoming (next 14 days):`);
+  for (const ev of state.scheduled.slice(0,8)){
+    lines.push(`- ${fmtShort(ev.dt)} • ${ev.kind}/${ev.source}: ${ev.title}`);
+  }
+  lines.push("");
+  lines.push(`Live triggers (last 48h):`);
+  for (const ev of state.live.slice(0,4)){
+    lines.push(`- ${ev.kind}/${ev.source}: ${ev.title}`);
+  }
+  return lines.join("\n");
+}
+
+function buildDeskNoteTrade(best){
+  const t = buildTradeCard(best);
+  const s = loadSettings();
+  const lines = [];
+  lines.push(`CATALYST AGENT — TRADE CARD`);
+  lines.push(`${fmtShort(new Date())} (local)`);
+  lines.push(`Instrument: ${t.ticker} (${t.kind})`);
+  lines.push(`Catalyst window: ${t.catalystWindow}`);
+  lines.push("");
+  lines.push(`Entry (LIMIT): ${t.entry.toFixed(2)} (D-Low ${t.dLow.toFixed(2)} + buffer)`);
+  lines.push(`Take Profit: ${t.tp.toFixed(2)} | Stop Loss: ${t.sl.toFixed(2)}`);
+  lines.push(`Size: ${t.shares} shares (~$${t.notional.toFixed(2)} notional)`);
+  lines.push(`Time stop: exit by ${fmtShort(t.timeStop)} if TP/SL not hit`);
+  lines.push("");
+  lines.push(`Math (fees $${s.fee}/order, tax ${s.tax}% on gains):`);
+  lines.push(`- If TP hits: gross +$${t.grossGain.toFixed(2)}; after fees $${t.feeRoundTrip.toFixed(2)} -> $${t.netGainBeforeTax.toFixed(2)}; tax $${t.taxAmt.toFixed(2)}; net +$${t.netGainAfterTax.toFixed(2)}`);
+  lines.push(`- If SL hits: gross -$${t.grossLoss.toFixed(2)}; plus fees $${t.feeRoundTrip.toFixed(2)}; net -$${t.netLossAfterFees.toFixed(2)}`);
+  return lines.join("\n");
+}
+
+/* ============
+   UI rendering
+   ============ */
+function renderUniverse(){
+  $("#universeCount").textContent = `${UNIVERSE.length} tickers`;
+  const box = $("#universeList");
+  box.innerHTML = "";
+  for (const u of UNIVERSE){
+    const p = state.prices[u.t];
+    const priceText = p && p.ok ? `${p.current.toFixed(2)} (ext ${p.extPct.toFixed(2)}%)` : "—";
+    box.appendChild(el("div",{class:"item"},[
+      el("div",{class:"left"},[
+        el("p",{class:"t"},[document.createTextNode(`${u.t} (${u.kind})`)]),
+        el("p",{class:"m"},[document.createTextNode(`Theme: ${u.theme.join(", ")} · Price: ${priceText}`)])
+      ]),
+      el("div",{class:"when"},[document.createTextNode(p && p.ok ? fmtShort(p.ts) : "no price")])
+    ]));
+  }
+}
+
+function renderGatePreview(){
+  const box = $("#gateList");
+  box.innerHTML = "";
+  let pass=0, fail=0;
+  for (const u of UNIVERSE){
+    const g = priceSanityGate(u.t);
+    if(g.ok) pass++; else fail++;
+    const dotClass = g.ok ? "ok" : (g.disqualified ? "bad" : "warn");
+    const p = state.prices[u.t] || {};
+    box.appendChild(el("div",{class:"item"},[
+      el("div",{class:"left"},[
+        el("p",{class:"t"},[document.createTextNode(`${u.t}`)]),
+        el("p",{class:"m"},[document.createTextNode(g.label)])
+      ]),
+      el("div",{class:"when"},[
+        el("span",{class:"dot "+dotClass, style:"display:inline-block; margin-right:8px; vertical-align:middle;"},[]),
+        document.createTextNode(p && p.ok ? `${p.current.toFixed(2)} / D-Low ${p.dLow.toFixed(2)}` : "—")
+      ])
+    ]));
+  }
+  $("#gateCount").textContent = `Pass ${pass} · Fail ${fail}`;
+}
+
+function renderSources(){
+  const sr = $("#statusRow");
+  sr.innerHTML = "";
+  const rows = [
+    {k:"Prices", v: state.sources.prices},
+    {k:"Macro (BLS)", v: state.sources.bls},
+    {k:"Auctions", v: state.sources.auctions},
+    {k:"Earnings", v: state.sources.earnings},
+    {k:"GDELT", v: state.sources.gdelt},
+    {k:"CISA", v: state.sources.cisa},
+    {k:"USGS", v: state.sources.usgs}
+  ];
+
+  for (const r of rows){
+    const st = r.v || {status:"warn", note:"pending"};
+    const dot = st.status==="ok" ? "ok" : (st.status==="bad" ? "bad" : "warn");
+    sr.appendChild(el("div",{class:"pill"},[
+      el("span",{class:"dot "+dot},[]),
+      el("span",{},[document.createTextNode(`${r.k}: ${st.note}`)])
+    ]));
+  }
+}
+
+function renderEvents(){
+  // Scheduled
+  const sBox = $("#scheduledList");
+  sBox.innerHTML = "";
+  for (const ev of state.scheduled.slice(0,18)){
+    const tags = [];
+    if(ev.importance==="High") tags.push({txt:"High impact", cls:"imp"});
+    if(ev.binary) tags.push({txt:"Binary", cls:"bin"});
+    tags.push({txt:ev.source, cls:"src"});
+    sBox.appendChild(renderEventItem(ev, tags));
+  }
+  $("#scheduledCount").textContent = `${state.scheduled.length} items`;
+
+  // Live
+  const lBox = $("#liveList");
+  lBox.innerHTML = "";
+  for (const ev of state.live.slice(0,12)){
+    // If cluster/pulse includes examples, render expanded
+    if(ev.examples && ev.examples.length){
+      const wrap = el("div",{class:"item"},[
+        el("div",{class:"left"},[
+          el("p",{class:"t"},[document.createTextNode(ev.title)]),
+          el("p",{class:"m"},[document.createTextNode(`Category: ${ev.kind} · Source: ${ev.source}`)]),
+          el("div",{class:"tagrow"},[
+            el("span",{class:"tag"},[document.createTextNode("Monitor")]),
+            el("span",{class:"tag src"},[document.createTextNode(ev.source)])
+          ]),
+          el("div",{style:"margin-top:10px; display:flex; flex-direction:column; gap:8px;"}, ev.examples.slice(0,4).map(ex=>{
+            const a = ex.url ? el("a",{href:ex.url, target:"_blank", rel:"noopener"},[document.createTextNode(shorten(ex.title,90))])
+                             : document.createTextNode(shorten(ex.title,90));
+            return el("div",{class:"muted tiny"},[document.createTextNode("• "), a]);
+          }))
+        ]),
+        el("div",{class:"when"},[document.createTextNode(fmtShort(ev.dt))])
+      ]);
+      lBox.appendChild(wrap);
+    } else {
+      lBox.appendChild(renderEventItem(ev, [ {txt:"Live", cls:""}, {txt:ev.source, cls:"src"} ]));
+    }
+  }
+  $("#liveCount").textContent = `${state.live.length} items`;
+}
+
+function renderDecision(result){
+  state.decision = result;
+  const now = new Date();
+  $("#lastRefresh").textContent = `Last refresh: ${fmtShort(now)}`;
+  $("#intelDot").className = "dot " + (result.decision==="TRADE" ? "ok" : "warn");
+
+  const tradeBox = $("#tradeBox");
+  const watchBox = $("#watchBox");
+
+  if(result.decision==="TRADE"){
+    $("#decisionBadge").className = "badge trade";
+    $("#decisionBadge").textContent = "TRADE";
+    $("#headline").textContent = `${result.trade.ticker} — Long (limit-only)`;
+    $("#why").innerHTML = buildPlainWhy(result);
+
+    tradeBox.style.display = "";
+    watchBox.style.display = "none";
+
+    const t = result.trade;
+    $("#tradeScoreBadge").textContent = `Score: ${t.score}/10`;
+    $("#tradeInstrument").textContent = `${t.ticker} (${t.kind})`;
+    $("#tradeWindow").textContent = t.catalystWindow || "—";
+
+    $("#tradeEntry").textContent = `${t.entry.toFixed(2)} (BUY LIMIT)`;
+    $("#tradeExits").textContent = `TP ${t.tp.toFixed(2)} | SL ${t.sl.toFixed(2)} (place OCO after fill)`;
+    $("#tradeSize").textContent = `${t.shares} shares (≈ $${t.notional.toFixed(2)} notional)`;
+    $("#tradeTimeStop").textContent = `Exit by ${fmtShort(t.timeStop)} (if TP/SL not hit)`;
+
+    const s = loadSettings();
+    $("#mathUpside").textContent =
+`UPSIDE (TP hits)
+Shares: ${t.shares}
+Entry:  ${t.entry.toFixed(2)}
+TP:     ${t.tp.toFixed(2)}
+Gross gain:          $${t.grossGain.toFixed(2)}
+Fees (2 orders):     $${t.feeRoundTrip.toFixed(2)}
+Net before tax:      $${t.netGainBeforeTax.toFixed(2)}
+Tax (${s.tax}% gains):       $${t.taxAmt.toFixed(2)}
+Net after tax:       $${t.netGainAfterTax.toFixed(2)}`;
+
+    $("#mathDownside").textContent =
+`DOWNSIDE (SL hits)
+Shares: ${t.shares}
+Entry:  ${t.entry.toFixed(2)}
+SL:     ${t.sl.toFixed(2)}
+Gross loss:          $${t.grossLoss.toFixed(2)}
+Fees (2 orders):     $${t.feeRoundTrip.toFixed(2)}
+Net loss after fees: $${t.netLossAfterFees.toFixed(2)}
+(Tax not applied to losses here)`;
+
+    // Notes
+    $("#sanityNote").style.display = "";
+    $("#sanityNote").textContent =
+      `Price sanity: Current ${t.current.toFixed(2)} vs D-Low ${t.dLow.toFixed(2)} → extension ${t.extPct.toFixed(2)}% (PASS).`;
+
+    $("#guardrailNote").style.display = "none";
+
+  }else{
+    $("#decisionBadge").className = "badge notrade";
+    $("#decisionBadge").textContent = "NO TRADE";
+    $("#headline").textContent = "NO TRADE (default stance)";
+    $("#why").innerHTML = `<span class="muted">Reason:</span> <b>${escapeHtml(result.reason || "No qualifying setup")}</b>. Use the Watchlist activation triggers below.`;
+
+    tradeBox.style.display = "none";
+    watchBox.style.display = "";
+
+    $("#watchReasonBadge").textContent = `Reason: ${shorten(result.reason||"—", 40)}`;
+
+    const wl = result.watch || buildWatchlist(buildCandidateCatalysts(), [], []);
+    const list = $("#watchList");
+    list.innerHTML = "";
+    for (const w of wl){
+      list.appendChild(el("div",{class:"item"},[
+        el("div",{class:"left"},[
+          el("p",{class:"t"},[document.createTextNode(w.title)]),
+          el("p",{class:"m"},[document.createTextNode(w.when)]),
+          el("p",{class:"m"},[document.createTextNode(w.why)]),
+          el("div",{class:"tagrow"}, (w.tags||[]).map(tg=>el("span",{class:"tag"},[document.createTextNode(tg)])))
+        ]),
+        el("div",{class:"when"},[document.createTextNode("WATCH")])
+      ]));
+    }
+
+    $("#watchHint").textContent =
+      "If a watchlist activation triggers, re-run this page after US close (EOD confirmation) before placing any order.";
+
+    $("#sanityNote").style.display = "none";
+    $("#guardrailNote").style.display = "";
+    $("#guardrailNote").textContent =
+      "Guardrail reminder: binary events (CPI/Fed/jobs/earnings) + extension → WATCHLIST only. Prefer post-event EOD confirmation.";
+  }
+
+  // Desk note
+  state.lastDeskNote = result.desk || buildDeskNoteNoTrade("No decision note");
+}
+
+function buildPlainWhy(result){
+  const t = result.trade;
+  const p = state.prices[t.ticker];
+  const parts = t.scoreParts;
+  const nextLine = (result.pick && result.pick.sc && result.pick.sc.next)
+    ? `${fmtShort(result.pick.sc.next.dt)} — ${shorten(result.pick.sc.next.title, 70)}`
+    : "—";
+
+  // Non-trader friendly rationale, explicit & brief
+  return `
+    <b>Why this (in plain terms):</b>
+    There is a <b>time-bounded catalyst</b> coming up (<span class="mono">${escapeHtml(nextLine)}</span>) that can move markets within days.
+    This instrument is <b>not stretched</b> (extension ${p.extPct.toFixed(2)}% vs strict cap),
+    so risk can be contained with a mechanical stop.
+    <br><br>
+    <span class="muted">Score breakdown (0–10):</span>
+    timing ${parts.timing}/2 · surprise ${parts.surprise}/2 · tradability ${parts.trad}/2 · follow-through ${parts.follow}/2 · risk ${parts.risk}/2
+  `;
+}
+
+/* ============
+   Orchestration
+   ============ */
+async function runAgent(){
+  setBusy(true);
+  state.sources = {};
+  state.scheduled = [];
+  state.live = [];
+  state.prices = {};
+
+  // Prices first (sanity gate depends on them)
+  try{
+    const prices = await Promise.race([fetchAllPrices(), timeout(45000)]);
+    state.prices = prices;
+    state.sources.prices = {status:"ok", note:"ok"};
+  }catch(e){
+    state.sources.prices = {status:"bad", note:"failed"};
+  }
+
+  // Scheduled: BLS + Auctions + optional FMP earnings
+  const s = loadSettings();
+
+  // BLS
+  try{
+    const bls = await Promise.race([fetchBLSCalendar(14), timeout(12000)]);
+    state.scheduled.push(...bls);
+    state.sources.bls = {status:"ok", note:`${bls.length} items`};
+  }catch(e){
+    state.sources.bls = {status:"bad", note:"failed"};
+  }
+
+  // Auctions
+  try{
+    const auc = await Promise.race([fetchTreasuryAuctions(14), timeout(12000)]);
+    state.scheduled.push(...auc);
+    state.sources.auctions = {status:"ok", note:`${auc.length} items`};
+  }catch(e){
+    state.sources.auctions = {status:"warn", note:"unavailable"};
+  }
+
+  // Earnings (optional via FMP)
+  try{
+    const ear = await Promise.race([fetchEarningsFMP(14, s.fmpKey || ""), timeout(12000)]);
+    state.scheduled.push(...ear);
+    state.sources.earnings = (s.fmpKey && ear.length>=0) ? {status:"ok", note:`${ear.length} items`} : {status:"warn", note:"(optional) add key"};
+  }catch(e){
+    state.sources.earnings = s.fmpKey ? {status:"warn", note:"failed"} : {status:"warn", note:"(optional) add key"};
+  }
+
+  // Normalize + sort scheduled
+  state.scheduled = state.scheduled
+    .filter(x=>x && x.dt && !Number.isNaN(+x.dt))
+    .sort((a,b)=>a.dt-b.dt);
+
+  // Live: GDELT + CISA + USGS
+  try{
+    const gd = await Promise.race([fetchGDELTLive(48), timeout(12000)]);
+    state.live.push(...gd);
+    state.sources.gdelt = {status:"ok", note:"ok"};
+  }catch(e){
+    state.sources.gdelt = {status:"warn", note:"unavailable"};
+  }
+  try{
+    const cisa = await Promise.race([fetchCISARSS(14), timeout(12000)]);
+    state.live.push(...cisa);
+    state.sources.cisa = {status:"ok", note:`${cisa.length} items`};
+  }catch(e){
+    state.sources.cisa = {status:"warn", note:"unavailable"};
+  }
+  try{
+    const usgs = await Promise.race([fetchUSGSEarthquakes(), timeout(12000)]);
+    state.live.push(...usgs);
+    state.sources.usgs = {status:"ok", note:`${usgs.length} items`};
+  }catch(e){
+    state.sources.usgs = {status:"warn", note:"unavailable"};
+  }
+
+  // Sort live (newest first)
+  state.live = state.live
+    .filter(x=>x && x.dt && !Number.isNaN(+x.dt))
+    .sort((a,b)=>b.dt-a.dt);
+
+  // Render base UI blocks
+  renderSources();
+  renderUniverse();
+  renderGatePreview();
+  renderEvents();
+
+  // Decide
+  const result = chooseOneTrade();
+  renderDecision(result);
+
+  setBusy(false);
+}
+
+function setBusy(on){
+  $("#btnRun").disabled = on;
+  $("#btnRun").textContent = on ? "Refreshing…" : "Refresh Intel & Decide";
+}
+
+/* ============
+   Render helpers
+   ============ */
+function renderEventItem(ev, tags){
+  const link = ev.url ? el("a",{href:ev.url, target:"_blank", rel:"noopener"},[document.createTextNode(shorten(ev.title, 110))])
+                      : document.createTextNode(shorten(ev.title, 110));
+  const subtitle = `${ev.kind} · ${ev.source}`;
+  const item = el("div",{class:"item"},[
+    el("div",{class:"left"},[
+      el("p",{class:"t"},[link]),
+      el("p",{class:"m"},[document.createTextNode(subtitle)]),
+      el("div",{class:"tagrow"}, (tags||[]).map(tg=>{
+        const cls = tg.cls ? `tag ${tg.cls}` : "tag";
+        return el("span",{class:cls},[document.createTextNode(tg.txt)]);
+      }))
+    ]),
+    el("div",{class:"when"},[document.createTextNode(fmtShort(ev.dt))])
+  ]);
+  return item;
+}
+
+/* ============
+   ICS parser (minimal)
+   ============ */
+function parseICS(ics){
+  // Unfold lines
+  const lines = ics.replace(/\r\n/g,"\n").split("\n");
+  const unfolded = [];
+  for (let i=0;i<lines.length;i++){
+    const line = lines[i];
+    if(line.startsWith(" ") || line.startsWith("\t")){
+      unfolded[unfolded.length-1] += line.slice(1);
+    }else{
+      unfolded.push(line);
+    }
+  }
+
+  const events = [];
+  let cur = null;
+
+  for (const ln of unfolded){
+    if(ln==="BEGIN:VEVENT"){ cur = {}; continue; }
+    if(ln==="END:VEVENT"){ if(cur) events.push(cur); cur=null; continue; }
+    if(!cur) continue;
+
+    const [kraw, ...rest] = ln.split(":");
+    if(!kraw || rest.length===0) continue;
+    const val = rest.join(":").trim();
+
+    const k = kraw.split(";")[0].trim();
+    const params = kraw.split(";").slice(1).join(";");
+
+    if(k==="SUMMARY") cur.summary = val;
+    if(k==="DESCRIPTION") cur.description = val;
+    if(k==="URL") cur.url = val;
+
+    if(k==="DTSTART"){
+      cur.dt = parseICSTime(val, params);
+    }
+  }
+  return events;
+}
+
+function parseICSTime(v, params){
+  // date-only: YYYYMMDD
+  if((params||"").includes("VALUE=DATE") || /^\d{8}$/.test(v)){
+    const y=v.slice(0,4), m=v.slice(4,6), d=v.slice(6,8);
+    return new Date(`${y}-${m}-${d}T00:00:00`);
+  }
+  // datetime: YYYYMMDDTHHMMSSZ or without Z
+  const m = v.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/);
+  if(m){
+    const iso = `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}${m[7]?"Z":""}`;
+    return new Date(iso);
+  }
+  // fallback
+  const d = new Date(v);
+  return Number.isNaN(+d) ? null : d;
+}
+
+/* ============
+   Utilities
+   ============ */
+function $(q){ return document.querySelector(q); }
+function el(tag, attrs={}, children=[]){
+  const n = document.createElement(tag);
+  for (const [k,v] of Object.entries(attrs||{})){
+    if(k==="class") n.className = v;
+    else if(k==="style") n.setAttribute("style", v);
+    else n.setAttribute(k, v);
+  }
+  for (const c of (children||[])){
+    if(c==null) continue;
+    n.appendChild(c.nodeType ? c : document.createTextNode(String(c)));
+  }
+  return n;
+}
+function textOf(parent, sel){
+  const n = parent.querySelector(sel);
+  return n ? (n.textContent||"").trim() : "";
+}
+function parseCSV(csv){
+  // Simple CSV (Stooq uses uncomplicated CSV)
+  const lines = csv.trim().split(/\r?\n/);
+  if(lines.length===0) return [];
+  const headers = lines[0].split(",").map(h=>h.trim());
+  const rows = [];
+  for(let i=1;i<lines.length;i++){
+    const cols = lines[i].split(","); // safe for Stooq
+    const obj = {};
+    for(let j=0;j<headers.length;j++){
+      obj[headers[j]] = (cols[j]||"").trim();
+    }
+    rows.push(obj);
+  }
+  return rows;
+}
+function num(x){
+  const n = Number(String(x||"").replace(/,/g,""));
+  return Number.isFinite(n) ? n : NaN;
+}
+function round2(x){ return Math.round(x*100)/100; }
+function addDays(d, n){ const x = new Date(d); x.setDate(x.getDate()+n); return x; }
+function startOfDay(d){ const x=new Date(d); x.setHours(0,0,0,0); return x; }
+function fmtDate(d){
+  const y=d.getFullYear();
+  const m=String(d.getMonth()+1).padStart(2,"0");
+  const da=String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${da}`;
+}
+function fmtShort(d){
+  try{
+    const dt = (d instanceof Date) ? d : new Date(d);
+    return dt.toLocaleString(undefined, { year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" });
+  }catch{ return String(d); }
+}
+function isHighImpact(title){
+  const s = (title||"").toLowerCase();
+  return HIGH_IMPACT.some(k=>s.includes(k.toLowerCase()));
+}
+function shorten(s, n){
+  s = String(s||"");
+  return s.length<=n ? s : s.slice(0, n-1)+"…";
+}
+function escapeHtml(str){
+  return String(str||"")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+function fmtGDELT(d){
+  // YYYYMMDDhhmmss
+  const y=d.getUTCFullYear();
+  const m=String(d.getUTCMonth()+1).padStart(2,"0");
+  const da=String(d.getUTCDate()).padStart(2,"0");
+  const hh=String(d.getUTCHours()).padStart(2,"0");
+  const mm=String(d.getUTCMinutes()).padStart(2,"0");
+  const ss=String(d.getUTCSeconds()).padStart(2,"0");
+  return `${y}${m}${da}${hh}${mm}${ss}`;
+}
+function parseGDELTSeenDate(seen){
+  // often: "20260111123000"
+  const m = String(seen||"").match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/);
+  if(m){
+    return new Date(Date.UTC(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]));
+  }
+  const d = new Date(seen);
+  return Number.isNaN(+d) ? new Date() : d;
+}
+
+/* ============
+   Buttons
+   ============ */
+$("#btnRun").addEventListener("click", runAgent);
+
+$("#btnCopy").addEventListener("click", async ()=>{
+  const txt = state.lastDeskNote || "";
+  if(!txt){
+    alert("Nothing to copy yet. Click Refresh first.");
+    return;
+  }
+  try{
+    await navigator.clipboard.writeText(txt);
+    $("#btnCopy").textContent = "Copied";
+    setTimeout(()=>$("#btnCopy").textContent="Copy desk note", 900);
+  }catch{
+    // fallback
+    const ta = document.createElement("textarea");
+    ta.value = txt;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+    $("#btnCopy").textContent = "Copied";
+    setTimeout(()=>$("#btnCopy").textContent="Copy desk note", 900);
+  }
+});
+
+$("#btnReset").addEventListener("click", ()=>{
+  localStorage.removeItem(SETTINGS_KEY);
+  bindSettingsUI();
+  state.sources = {};
+  state.scheduled = [];
+  state.live = [];
+  state.prices = {};
+  state.lastDeskNote = "";
+  renderSources();
+  renderUniverse();
+  renderGatePreview();
+  $("#scheduledList").innerHTML = "";
+  $("#liveList").innerHTML = "";
+  $("#scheduledCount").textContent = "0 items";
+  $("#liveCount").textContent = "0 items";
+  $("#decisionBadge").className = "badge watch";
+  $("#decisionBadge").textContent = "WATCHLIST MODE";
+  $("#headline").textContent = "Click “Refresh Intel & Decide”";
+  $("#why").textContent = "This agent defaults to NO TRADE if price/catalyst intel is incomplete.";
+  $("#tradeBox").style.display="none";
+  $("#watchBox").style.display="none";
+  $("#lastRefresh").textContent = "Not refreshed yet";
+});
+
+/* ============
+   Init
+   ============ */
+(function init(){
+  bindSettingsUI();
+  renderSources();
+  renderUniverse();
+  renderGatePreview();
 })();
 </script>
 </body>
