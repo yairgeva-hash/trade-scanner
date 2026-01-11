@@ -88,6 +88,7 @@
     button:active{transform:translateY(1px)}
     button.small{padding:8px 10px; border-radius:10px; font-weight:600; font-size:12.5px;}
     button.ghost{background:transparent}
+    button:disabled{opacity:.6; cursor:not-allowed}
     .grid{
       margin-top:16px;
       display:grid;
@@ -295,6 +296,44 @@
     .muted{color:var(--muted)}
     .mono{font-family:var(--mono)}
     .tiny{font-size:12px}
+
+    /* =========================
+       RUN OVERLAY (in-process signaling)
+       ========================= */
+    #runOverlay{
+      position:fixed; inset:0; z-index:9999;
+      background:rgba(0,0,0,.55);
+      display:none;
+      align-items:center; justify-content:center;
+      backdrop-filter: blur(6px);
+    }
+    #runOverlay .box{
+      display:flex; gap:14px; align-items:center;
+      padding:14px 16px; border-radius:16px;
+      border:1px solid rgba(255,255,255,.14);
+      background:rgba(15,26,46,.92);
+      box-shadow: 0 18px 50px rgba(0,0,0,.45);
+      max-width:560px;
+      width: calc(100vw - 32px);
+    }
+    #runOverlay .title{font-weight:900}
+    #runOverlay .detail{color:rgba(169,183,214,.95); font-size:13px; margin-top:4px}
+    #runOverlay .spinner{
+      width:22px;height:22px;border-radius:999px;
+      border:3px solid rgba(255,255,255,.18);
+      border-top-color: rgba(96,165,250,.95);
+      animation: spin .9s linear infinite;
+      flex: 0 0 auto;
+    }
+    #runOverlay .meta{
+      margin-left:auto;
+      text-align:right;
+      font-family:var(--mono);
+      font-size:12px;
+      color:rgba(223,233,255,.95);
+      white-space:nowrap;
+    }
+    @keyframes spin{to{transform:rotate(360deg)}}
   </style>
 </head>
 
@@ -314,9 +353,9 @@
           <!-- populated -->
         </div>
         <div class="actions">
-          <button class="primary" id="btnRun">Refresh Intel & Decide</button>
-          <button class="small" id="btnCopy">Copy desk note</button>
-          <button class="small ghost" id="btnReset">Reset</button>
+          <button type="button" class="primary" id="btnRun">Refresh Intel & Decide</button>
+          <button type="button" class="small" id="btnCopy">Copy desk note</button>
+          <button type="button" class="small ghost" id="btnReset">Reset</button>
         </div>
       </div>
     </div>
@@ -478,7 +517,7 @@
               </div>
 
               <p class="dangerNote">
-                Browser security note: Some sources can block direct browser requests (CORS). This page automatically retries through a public “raw” proxy when needed.
+                Browser security note: Some sources can block direct browser requests (CORS). This page retries through public “raw” proxies when needed.
                 For best results, open this file via a local server (not file://). Example: <span class="mono">python -m http.server 8000</span>.
               </p>
 
@@ -510,7 +549,7 @@
                 <span class="muted tiny" id="gateCount">—</span>
               </summary>
               <div class="list" id="gateList" style="margin-top:10px;"></div>
-              <p class="hint">Gate uses: Current (intraday quote when available, otherwise last close) + latest valid daily low (D-Low).</p>
+              <p class="hint">Gate uses: Current (intraday quote when available; otherwise last close) + latest valid daily low (D-Low).</p>
             </details>
 
           </div>
@@ -519,13 +558,31 @@
     </div>
   </div>
 
+  <!-- RUN OVERLAY -->
+  <div id="runOverlay">
+    <div class="box">
+      <div class="spinner"></div>
+      <div style="min-width:0">
+        <div id="runStep" class="title">Running…</div>
+        <div id="runDetail" class="detail">Starting</div>
+        <div id="runProgress" class="detail"></div>
+      </div>
+      <div class="meta">
+        <div id="runElapsed">0.0s</div>
+        <div id="runHint" style="color:rgba(169,183,214,.95)">Fetching live intel…</div>
+      </div>
+    </div>
+  </div>
+
 <script>
 /* =========================
-   Catalyst Agent — V2.1 UI Simplification
-   - ONE button
-   - Auto-fetch next 14 days (scheduled) + live triggers (unscheduled)
-   - Hard bias to NO TRADE when intel/price invalid
-   - Big trade card + separate boxes + visible math
+   Catalyst Agent — V2.1 UI Simplification (patched)
+   FIXES:
+   - In-process overlay + step progress + elapsed time
+   - AbortController timeouts (no more hanging fetch)
+   - Faster price pull: daily close + D-Low baseline; optional quote only in intraday mode
+   - Parallelism with small pools (prices + GDELT queries)
+   - Better source notes (e.g., "8/12 ok", sample error)
    ========================= */
 
 const SETTINGS_KEY = "CA_SETTINGS_V2_1";
@@ -534,7 +591,6 @@ const state = {
   scheduled: [],
   live: [],
   prices: {},        // { TICKER: { current, lastClose, dLow, extPct, ts, ok } }
-  earnings: [],      // { ticker, dt, whenText }
   decision: null,
   lastDeskNote: ""
 };
@@ -551,7 +607,6 @@ const UNIVERSE = [
   { t:"ITA", kind:"ETF", theme:["defense","geopolitics"] },
   { t:"CIBR",kind:"ETF", theme:["cyber"] },
 
-  // A few bellwether large caps (optional stock trades)
   { t:"NVDA", kind:"Stock", theme:["semis","earnings"] },
   { t:"MSFT", kind:"Stock", theme:["cloud","regulation","earnings"] },
   { t:"CRWD", kind:"Stock", theme:["cyber","earnings"] }
@@ -570,7 +625,7 @@ const RULES = {
   timeStopTradingDays: 20
 };
 
-// High-impact macro keywords (BLS iCal + BEA)
+// High-impact macro keywords
 const HIGH_IMPACT = [
   "Consumer Price Index", "CPI",
   "Employment Situation", "Nonfarm", "Unemployment",
@@ -580,7 +635,35 @@ const HIGH_IMPACT = [
   "Personal Income", "Personal Consumption Expenditures", "PCE"
 ];
 
+// =========================
+// In-process UI
+// =========================
+let runTimer = null;
+let runStartedAt = 0;
+
+function setRunUI(running, step="", detail="", progress="", hint=""){
+  $("#runOverlay").style.display = running ? "flex" : "none";
+  $("#runStep").textContent = step || (running ? "Running…" : "");
+  $("#runDetail").textContent = detail || "";
+  $("#runProgress").textContent = progress || "";
+  $("#runHint").textContent = hint || (running ? "Fetching live intel…" : "");
+  if(running && !runTimer){
+    runStartedAt = performance.now();
+    runTimer = setInterval(()=>{
+      const s = (performance.now() - runStartedAt)/1000;
+      $("#runElapsed").textContent = `${s.toFixed(1)}s`;
+    }, 120);
+  }
+  if(!running && runTimer){
+    clearInterval(runTimer);
+    runTimer = null;
+    $("#runElapsed").textContent = "0.0s";
+  }
+}
+
+// =========================
 // Binary catalysts (guardrail)
+// =========================
 function isBinaryTitle(title){
   const s = (title||"").toLowerCase();
   return (
@@ -594,7 +677,6 @@ function isBinaryTitle(title){
   );
 }
 
-// Map events to themes (very simple but transparent)
 function themesFromTitle(title){
   const s = (title||"").toLowerCase();
   const tags = new Set();
@@ -620,23 +702,21 @@ function themesFromTitle(title){
   return Array.from(tags);
 }
 
-// Universe→likely catalyst mapping (for scoring explanation)
 function relevanceScore(ticker, eventThemes){
   const u = UNIVERSE.find(x=>x.t===ticker);
   if(!u) return 0;
   const th = new Set(u.theme);
   let hits = 0;
   for (const et of eventThemes) if (th.has(et)) hits++;
-  // add broad mapping
   if (th.has("rates") && eventThemes.includes("inflation")) hits++;
   if (th.has("rates") && eventThemes.includes("jobs")) hits++;
   if (th.has("risk") && (eventThemes.includes("growth") || eventThemes.includes("rates"))) hits++;
   return hits;
 }
 
-/* ============
-   Settings
-   ============ */
+// =========================
+// Settings
+// =========================
 function loadSettings(){
   const def = { cap: 1800, fee: 8, tax: 25, mode: "eod", fmpKey: "" };
   try{
@@ -663,60 +743,92 @@ function bindSettingsUI(){
   $("#mode").addEventListener("change", ()=>{ const z=loadSettings(); z.mode=$("#mode").value; saveSettings(z); });
   $("#fmp").addEventListener("input", ()=>{ const z=loadSettings(); z.fmpKey=$("#fmp").value.trim(); saveSettings(z); });
 }
-
 function clampNum(v,min,max,def){
   const n = Number(v);
   if(!Number.isFinite(n)) return def;
   return Math.max(min, Math.min(max, n));
 }
 
-/* ============
-   Fetch helpers (direct + fallback proxy)
-   ============ */
-async function fetchText(url, opts={}){
-  // 1) direct
-  try{
-    const r = await fetch(url, { ...opts, cache:"no-store" });
-    if(!r.ok) throw new Error("HTTP "+r.status);
-    return await r.text();
-  }catch(e1){
-    // 2) allorigins raw
-    const prox = "https://api.allorigins.win/raw?url=" + encodeURIComponent(url);
-    const r2 = await fetch(prox, { cache:"no-store" });
-    if(!r2.ok) throw e1;
-    return await r2.text();
-  }
+// =========================
+// Fetch helpers (AbortController + proxy fallbacks)
+// =========================
+function buildFetchTries(url){
+  return [
+    url,
+    "https://api.allorigins.win/raw?url=" + encodeURIComponent(url),
+    "https://corsproxy.io/?" + encodeURIComponent(url)
+  ];
 }
-async function fetchJSON(url, opts={}){
-  const txt = await fetchText(url, opts);
+
+async function fetchText(url, { timeoutMs=12000 } = {}){
+  const tries = buildFetchTries(url);
+  let lastErr = null;
+
+  for(const u of tries){
+    const ctl = new AbortController();
+    const t = setTimeout(()=>ctl.abort(), timeoutMs);
+    try{
+      const r = await fetch(u, { signal: ctl.signal, cache:"no-store" });
+      if(!r.ok) throw new Error(`HTTP ${r.status}`);
+      return await r.text();
+    }catch(e){
+      lastErr = e;
+    }finally{
+      clearTimeout(t);
+    }
+  }
+  throw lastErr || new Error("fetch failed");
+}
+
+async function fetchJSON(url, { timeoutMs=12000 } = {}){
+  const txt = await fetchText(url, { timeoutMs });
   try{
     return JSON.parse(txt);
   }catch{
-    // Some proxies can add unexpected output; try to salvage JSON by finding first { or [
+    // salvage: find first { or [
     const i1 = txt.indexOf("{");
     const i2 = txt.indexOf("[");
     const i = (i1===-1) ? i2 : (i2===-1 ? i1 : Math.min(i1,i2));
-    if(i>=0){
-      return JSON.parse(txt.slice(i));
-    }
+    if(i>=0) return JSON.parse(txt.slice(i));
     throw new Error("JSON parse failed");
   }
 }
-function timeout(ms){ return new Promise((_,rej)=>setTimeout(()=>rej(new Error("timeout")),ms)); }
 
-/* ============
-   Data sources (free/open)
-   ============ */
+// small concurrency pool
+async function mapPool(items, limit, fn, onProgress){
+  let i=0, done=0;
+  const out = {};
+  const workers = new Array(limit).fill(0).map(async ()=>{
+    while(true){
+      const idx = i++;
+      if(idx >= items.length) break;
+      const it = items[idx];
+      try{
+        out[it] = await fn(it);
+      }catch(e){
+        out[it] = { ok:false, err: String(e?.message || e) };
+      }
+      done++;
+      onProgress?.(done, items.length, it, out[it]);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
 
-// 1) Macro: BLS iCal (keyless) — https://www.bls.gov/schedule/news_release/bls.ics
+// =========================
+// Data sources (free/open)
+// =========================
+
+// 1) Macro: BLS iCal (keyless)
 async function fetchBLSCalendar(nextDays=14){
   const url = "https://www.bls.gov/schedule/news_release/bls.ics";
-  const ics = await fetchText(url);
+  const ics = await fetchText(url, {timeoutMs: 15000});
   const events = parseICS(ics);
 
   const now = new Date();
   const end = addDays(now, nextDays);
-  const out = events
+  return events
     .filter(e => e.dt && e.dt >= startOfDay(now) && e.dt <= end)
     .map(e => ({
       title: e.summary || "BLS Release",
@@ -728,17 +840,13 @@ async function fetchBLSCalendar(nextDays=14){
       themes: themesFromTitle(e.summary)
     }))
     .sort((a,b)=>a.dt-b.dt);
-
-  return out;
 }
 
 // 2) Auctions: US Treasury FiscalData Upcoming Auctions (keyless)
+// NOTE: endpoints can change; this is treated as "best effort"
 async function fetchTreasuryAuctions(nextDays=14){
-  // Base: https://api.fiscaldata.treasury.gov/services/api/fiscal_service/
-  // Dataset: Treasury Securities Auctions Data / Upcoming auctions endpoints vary by dataset; we use a commonly exposed "upcoming auctions" endpoint.
-  // If endpoint changes, the agent will show source failure and bias to NO TRADE.
   const base = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/";
-  const endpoint = "v1/debt/mspd/upcoming_auctions"; // best-effort; if your environment differs, you can adjust endpoint here.
+  const endpoint = "v1/debt/mspd/upcoming_auctions";
   const now = new Date();
   const from = fmtDate(now);
   const to = fmtDate(addDays(now, nextDays));
@@ -746,11 +854,12 @@ async function fetchTreasuryAuctions(nextDays=14){
     "filter": `auction_date:gte:${from},auction_date:lte:${to}`,
     "page[size]": "200"
   }).toString();
-
   const url = base + endpoint + "?" + qs;
-  const j = await fetchJSON(url);
+
+  const j = await fetchJSON(url, {timeoutMs: 12000});
   const rows = (j && j.data) ? j.data : [];
-  const out = rows.map(r=>{
+
+  return rows.map(r=>{
     const title = `Treasury Auction — ${r.security_term || r.security_type || "Marketable"} (${r.security_type||""})`.trim();
     const dt = r.auction_date ? new Date(r.auction_date+"T00:00:00") : null;
     return {
@@ -763,11 +872,9 @@ async function fetchTreasuryAuctions(nextDays=14){
       themes: ["rates"]
     };
   }).filter(x=>x.dt).sort((a,b)=>a.dt-b.dt);
-
-  return out;
 }
 
-// 3) Earnings: optional FMP (free key) — stable endpoint
+// 3) Earnings: optional FMP (free key)
 async function fetchEarningsFMP(nextDays=14, apiKey=""){
   if(!apiKey) return [];
   const now = new Date();
@@ -776,11 +883,11 @@ async function fetchEarningsFMP(nextDays=14, apiKey=""){
   const url = "https://financialmodelingprep.com/stable/earnings-calendar"
     + `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&apikey=${encodeURIComponent(apiKey)}`;
 
-  const j = await fetchJSON(url);
+  const j = await fetchJSON(url, {timeoutMs: 12000});
   const rows = Array.isArray(j) ? j : (j && j.data ? j.data : []);
   const tickers = new Set(UNIVERSE.map(x=>x.t));
 
-  const out = rows
+  return rows
     .filter(r => tickers.has((r.symbol||"").toUpperCase()))
     .map(r => {
       const t = (r.symbol||"").toUpperCase();
@@ -798,11 +905,9 @@ async function fetchEarningsFMP(nextDays=14, apiKey=""){
     })
     .filter(x=>x.dt)
     .sort((a,b)=>a.dt-b.dt);
-
-  return out;
 }
 
-// 4) Live triggers: GDELT (keyless)
+// 4) Live triggers: GDELT (keyless) — parallel queries
 async function fetchGDELTLive(hours=48){
   const end = new Date();
   const start = new Date(end.getTime() - hours*60*60*1000);
@@ -814,27 +919,29 @@ async function fetchGDELTLive(hours=48){
     { key:"Disasters", q:'(earthquake OR hurricane OR typhoon OR wildfire OR flood)' }
   ];
 
-  const out = [];
-  for (const qq of queries){
-    const url = "https://api.gdeltproject.org/api/v2/doc/doc?"
-      + new URLSearchParams({
-        query: qq.q,
-        mode: "artlist",
-        format: "json",
-        maxrecords: "12",
-        sort: "HybridRel",
-        startdatetime: fmtGDELT(start),
-        enddatetime: fmtGDELT(end)
-      }).toString();
+  const results = await mapPool(
+    queries.map(x=>x.key),
+    2,
+    async (key)=>{
+      const qq = queries.find(x=>x.key===key);
+      const url = "https://api.gdeltproject.org/api/v2/doc/doc?"
+        + new URLSearchParams({
+          query: qq.q,
+          mode: "artlist",
+          format: "json",
+          maxrecords: "12",
+          sort: "HybridRel",
+          startdatetime: fmtGDELT(start),
+          enddatetime: fmtGDELT(end)
+        }).toString();
 
-    try{
-      const j = await fetchJSON(url);
+      const j = await fetchJSON(url, {timeoutMs: 12000});
       const arts = (j && j.articles) ? j.articles : [];
       const top = arts.slice(0,6).map(a=>{
         const title = a.title || qq.key;
         const dt = a.seendate ? parseGDELTSeenDate(a.seendate) : null;
         return {
-          title: title,
+          title,
           dt: dt || end,
           source: "GDELT",
           kind: qq.key,
@@ -845,9 +952,11 @@ async function fetchGDELTLive(hours=48){
         };
       });
 
-      // Add ONE summarized “cluster” item + a few examples
-      if(top.length){
-        out.push({
+      if(!top.length) return { ok:true, items: [] };
+
+      return {
+        ok:true,
+        items: [{
           title: `${qq.key} pulse — ${top.length} notable items (last ${hours}h)`,
           dt: end,
           source:"GDELT",
@@ -856,27 +965,29 @@ async function fetchGDELTLive(hours=48){
           binary:false,
           themes: [qq.key.toLowerCase()],
           examples: top
-        });
-      }
-    }catch{
-      // ignore per-query; caller will handle source status
-      throw new Error("GDELT fetch failed");
+        }]
+      };
     }
-  }
+  );
 
+  const out = [];
+  for(const k of Object.keys(results)){
+    const r = results[k];
+    if(r && r.ok && r.items) out.push(...r.items);
+  }
   return out;
 }
 
 // 5) Cyber: CISA advisories RSS (keyless)
-async function fetchCISARSS(nextDays=14){
+async function fetchCISARSS(lookbackDays=14){
   const url = "https://www.cisa.gov/cybersecurity-advisories/all.xml";
-  const xml = await fetchText(url);
+  const xml = await fetchText(url, {timeoutMs: 15000});
   const doc = new DOMParser().parseFromString(xml, "text/xml");
   const items = Array.from(doc.querySelectorAll("item"));
   const now = new Date();
-  const from = addDays(now, -nextDays);
+  const from = addDays(now, -lookbackDays);
 
-  const out = items.map(it=>{
+  return items.map(it=>{
     const title = textOf(it, "title");
     const link = textOf(it, "link");
     const pub = textOf(it, "pubDate");
@@ -892,16 +1003,14 @@ async function fetchCISARSS(nextDays=14){
       url: link
     };
   }).filter(x=>x.dt && x.dt>=from).sort((a,b)=>b.dt-a.dt).slice(0,8);
-
-  return out;
 }
 
 // 6) Disasters: USGS earthquakes feed (keyless)
 async function fetchUSGSEarthquakes(){
   const url = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_week.geojson";
-  const j = await fetchJSON(url);
+  const j = await fetchJSON(url, {timeoutMs: 12000});
   const feats = (j && j.features) ? j.features : [];
-  const out = feats.slice(0,8).map(f=>{
+  return feats.slice(0,8).map(f=>{
     const p = f.properties || {};
     const title = p.title || "Significant earthquake";
     const dt = p.time ? new Date(p.time) : null;
@@ -916,78 +1025,90 @@ async function fetchUSGSEarthquakes(){
       url: p.url || ""
     };
   }).filter(x=>x.dt).sort((a,b)=>b.dt-a.dt);
-
-  return out;
 }
 
-/* ============
-   Prices (keyless): Stooq
-   - Current: quote endpoint (intraday/delayed)
-   - D-Low: daily history endpoint
-   ============ */
-
+// =========================
+// Prices (keyless): Stooq (patched for speed/reliability)
+// - Baseline: daily close + daily low
+// - Intraday mode: attempt quote, but never blocks decision if quote fails
+// =========================
 function stooqSymbol(ticker){
-  // Stooq expects lowercase and .us for US stocks/ETFs
   return ticker.toLowerCase() + ".us";
 }
 async function fetchStooqQuote(ticker){
-  // Example: https://stooq.com/q/l/?s=spy.us&f=sd2t2ohlcv&h&e=csv
   const s = stooqSymbol(ticker);
   const url = `https://stooq.com/q/l/?s=${encodeURIComponent(s)}&f=sd2t2ohlcv&h&e=csv`;
-  const csv = await fetchText(url);
+  const csv = await fetchText(url, {timeoutMs: 9000});
   const rows = parseCSV(csv);
-  // header: Symbol,Date,Time,Open,High,Low,Close,Volume
   if(rows.length<2) throw new Error("quote csv empty");
   const r = rows[1];
   const close = num(r.Close);
   const dt = (r.Date && r.Time) ? new Date(`${r.Date}T${r.Time}`) : null;
+  if(!Number.isFinite(close) || close<=0) throw new Error("quote invalid");
   return { current: close, ts: dt || new Date(), raw: r };
 }
-async function fetchStooqDaily(ticker, days=90){
-  // Example: https://stooq.com/q/d/l/?s=spy.us&i=d
+async function fetchStooqDaily(ticker){
   const s = stooqSymbol(ticker);
   const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(s)}&i=d`;
-  const csv = await fetchText(url);
+  const csv = await fetchText(url, {timeoutMs: 12000});
   const rows = parseCSV(csv);
   if(rows.length<5) throw new Error("daily csv empty");
-  // last row is latest trading day
   const last = rows[rows.length-1];
   const lastClose = num(last.Close);
   const dLow = num(last.Low);
   const volume = num(last.Volume);
   const date = last.Date ? new Date(last.Date+"T00:00:00") : new Date();
-  return { lastClose, dLow, volume, dt: date, rows };
+  if(!Number.isFinite(lastClose) || !Number.isFinite(dLow) || dLow<=0) throw new Error("daily invalid");
+  return { lastClose, dLow, volume, dt: date };
+}
+
+async function fetchPriceForTicker(ticker){
+  const mode = loadSettings().mode;
+  const d = await fetchStooqDaily(ticker);
+
+  let current = d.lastClose;
+  let ts = d.dt;
+
+  if(mode === "intraday"){
+    // quote is optional; never blocks
+    try{
+      const q = await fetchStooqQuote(ticker);
+      current = q.current;
+      ts = q.ts;
+    }catch{
+      // keep daily close
+    }
+  }
+
+  const extPct = (current - d.dLow) / d.dLow * 100;
+  return {
+    ok: true,
+    current,
+    lastClose: d.lastClose,
+    dLow: d.dLow,
+    volume: d.volume,
+    ts,
+    extPct
+  };
 }
 
 async function fetchAllPrices(){
-  const out = {};
-  for (const u of UNIVERSE){
-    try{
-      const [q,d] = await Promise.all([
-        Promise.race([fetchStooqQuote(u.t), timeout(6000)]),
-        Promise.race([fetchStooqDaily(u.t), timeout(8000)])
-      ]);
-      const current = (Number.isFinite(q.current) && q.current>0) ? q.current : d.lastClose;
-      const lastClose = d.lastClose;
-      const dLow = d.dLow;
-      const extPct = (current - dLow) / dLow * 100;
-      out[u.t] = {
-        current, lastClose, dLow, extPct,
-        volume: d.volume,
-        ts: q.ts,
-        ok: Number.isFinite(current) && Number.isFinite(dLow) && dLow>0
-      };
-    }catch(e){
-      out[u.t] = { ok:false, err: String(e && e.message ? e.message : e) };
+  const tickers = UNIVERSE.map(x=>x.t);
+  const out = await mapPool(
+    tickers,
+    5,
+    async (t)=> await fetchPriceForTicker(t),
+    (done,total,t,res)=>{
+      const ok = Object.values(state.prices).filter(x=>x && x.ok).length;
+      setRunUI(true, "Prices", "Fetching daily close + D-Low (fast, reliable)…", `${done}/${total} (ok so far: ${ok})`, "Prices drive the sanity gate.");
     }
-  }
+  );
   return out;
 }
 
-/* ============
-   Decision Engine (faithful to your prompt, but simplified)
-   ============ */
-
+// =========================
+// Decision Engine (unchanged logic, but better error reasons)
+// =========================
 function priceSanityGate(ticker){
   const u = UNIVERSE.find(x=>x.t===ticker);
   const p = state.prices[ticker];
@@ -1002,17 +1123,14 @@ function priceSanityGate(ticker){
 }
 
 function buildCandidateCatalysts(){
-  // scheduled: macro + auctions + earnings
   const sched = state.scheduled.slice();
   const now = new Date();
 
-  // Build per-ticker list by relevance
   const per = {};
   for (const u of UNIVERSE){
     per[u.t] = [];
     for (const ev of sched){
       const rel = relevanceScore(u.t, ev.themes || []);
-      // broad mapping: rates events affect TLT/IEF/XLF and overall risk proxies
       const isRatesEvent = (ev.themes||[]).includes("rates") || (ev.themes||[]).includes("inflation") || (ev.themes||[]).includes("jobs");
       const broadOk =
         (u.t==="TLT" || u.t==="IEF" || u.t==="XLF") ? isRatesEvent :
@@ -1032,60 +1150,11 @@ function buildCandidateCatalysts(){
   return per;
 }
 
-function catalystQualityScore(ticker, candEvents){
-  // Score 0–10: timing clarity, surprise potential, tradability, follow-through, risk containment
-  const u = UNIVERSE.find(x=>x.t===ticker);
-  const p = state.prices[ticker];
-  if(!u || !p || !p.ok) return { score:0, parts:{} };
-
-  const now = new Date();
-  const next = (candEvents||[])[0] || null;
-
-  // 1) Timing clarity (0–2)
-  let timing = 0;
-  if(next){
-    timing = next.binary ? 2 : 1;
-  }
-
-  // 2) Surprise potential (0–2) — simplified, transparent:
-  // High impact scheduled events are treated as higher surprise potential.
-  let surprise = 0;
-  if(next){
-    surprise = (next.importance==="High") ? 2 : 1;
-  }
-
-  // 3) Tradability (0–2): approximate using dollar volume
-  const dollarVol = (p.lastClose || p.current) * (p.volume || 0);
-  let trad = 0;
-  if(dollarVol > 5e9) trad = 2;
-  else if(dollarVol > 1e9) trad = 1;
-  else trad = 0;
-
-  // 4) Follow-through (0–2): use "is there a chain of >1 relevant events" + small live trigger support
-  let follow = 0;
-  const chain = (candEvents||[]).filter(e=>e.importance==="High").length;
-  if(chain >= 2) follow = 2;
-  else if(chain === 1) follow = 1;
-
-  // Add at most +1 support if live triggers match the ticker themes
-  const liveSupport = liveSupportForTicker(ticker); // 0 or 1
-  follow = Math.min(2, follow + liveSupport);
-
-  // 5) Risk containment (0–2): closer to D-Low is better; too extended -> already filtered out
-  let risk = 2;
-  if(p.extPct > 1.0) risk = 1;
-  if(p.extPct > 1.5) risk = 0;
-
-  const score = timing + surprise + trad + follow + risk;
-  return { score, parts: { timing, surprise, trad, follow, risk }, next };
-}
-
 function liveSupportForTicker(ticker){
   const u = UNIVERSE.find(x=>x.t===ticker);
   if(!u) return 0;
 
   const themes = new Set(u.theme);
-  // If live contains a pulse cluster of matching category, provide +1 support
   for (const ev of state.live){
     const k = (ev.kind||"").toLowerCase();
     if(k.includes("geopolit") && (themes.has("geopolitics") || themes.has("defense") || themes.has("energy"))) return 1;
@@ -1096,10 +1165,38 @@ function liveSupportForTicker(ticker){
   return 0;
 }
 
-function binaryGuardrail(ticker, candEvents){
+function catalystQualityScore(ticker, candEvents){
   const u = UNIVERSE.find(x=>x.t===ticker);
   const p = state.prices[ticker];
-  if(!u || !p || !p.ok) return { watchOnly:true, reason:"PRICE UNKNOWN" };
+  if(!u || !p || !p.ok) return { score:0, parts:{} };
+
+  const next = (candEvents||[])[0] || null;
+
+  let timing = next ? (next.binary ? 2 : 1) : 0;
+  let surprise = next ? ((next.importance==="High") ? 2 : 1) : 0;
+
+  const dollarVol = (p.lastClose || p.current) * (p.volume || 0);
+  let trad = 0;
+  if(dollarVol > 5e9) trad = 2;
+  else if(dollarVol > 1e9) trad = 1;
+
+  let follow = 0;
+  const chain = (candEvents||[]).filter(e=>e.importance==="High").length;
+  if(chain >= 2) follow = 2;
+  else if(chain === 1) follow = 1;
+  follow = Math.min(2, follow + liveSupportForTicker(ticker));
+
+  let risk = 2;
+  if(p.extPct > 1.0) risk = 1;
+  if(p.extPct > 1.5) risk = 0;
+
+  const score = timing + surprise + trad + follow + risk;
+  return { score, parts: { timing, surprise, trad, follow, risk }, next };
+}
+
+function binaryGuardrail(ticker, candEvents){
+  const p = state.prices[ticker];
+  if(!p || !p.ok) return { watchOnly:true, reason:"PRICE UNKNOWN" };
 
   const hasBinary = (candEvents||[]).some(e=>e.binary);
   if(!hasBinary) return { watchOnly:false, reason:"" };
@@ -1111,24 +1208,26 @@ function binaryGuardrail(ticker, candEvents){
 }
 
 function chooseOneTrade(){
-  // Intel completeness checks
-  const haveMacro = state.scheduled.some(x=>x.kind==="Macro");
-  const haveAuctions = state.scheduled.some(x=>x.kind==="Auction");
   const haveAnyScheduled = state.scheduled.length > 0;
-
   const pricesOkCount = Object.values(state.prices).filter(p=>p && p.ok).length;
+  const needOk = Math.max(6, Math.floor(UNIVERSE.length*0.6));
 
-  if(!haveAnyScheduled || pricesOkCount < Math.max(6, Math.floor(UNIVERSE.length*0.6))){
+  if(!haveAnyScheduled || pricesOkCount < needOk){
+    const sampleErr = firstPriceError();
+    const reason =
+      !haveAnyScheduled
+        ? "Scheduled catalyst feed missing"
+        : `Price feed incomplete (${pricesOkCount}/${UNIVERSE.length} ok). ${sampleErr ? "Sample error: "+sampleErr : ""}`.trim();
+
     return {
       decision:"NO_TRADE",
-      reason: !haveAnyScheduled ? "Scheduled catalyst feed missing" : "Price feed incomplete",
+      reason,
       desk: buildDeskNoteNoTrade("Intel incomplete: default NO TRADE.")
     };
   }
 
   const per = buildCandidateCatalysts();
 
-  // Apply Price Sanity Gate first
   const eligible = [];
   const watchOnly = [];
 
@@ -1145,7 +1244,6 @@ function chooseOneTrade(){
       continue;
     }
 
-    // Require at least one time-bounded catalyst in the next 14 days
     if(!per[u.t] || per[u.t].length===0){
       watchOnly.push({ t:u.t, gate, guard: { watchOnly:true, reason:"No time-bounded catalyst mapped in next 14 days" } });
       continue;
@@ -1168,7 +1266,6 @@ function chooseOneTrade(){
     };
   }
 
-  // Additional safety: if the next catalyst is within 2 days AND binary, prefer watchlist
   const next = best.sc.next;
   const daysAway = next ? Math.round((next.dt - new Date())/(24*3600*1000)) : 999;
   if(next && next.binary && daysAway <= 2){
@@ -1181,7 +1278,6 @@ function chooseOneTrade(){
     };
   }
 
-  // Build trade plan (limit-only)
   return {
     decision:"TRADE",
     pick: best,
@@ -1190,9 +1286,9 @@ function chooseOneTrade(){
   };
 }
 
-/* ============
-   Trade card + math (fees/tax) — exact numbers
-   ============ */
+// =========================
+// Trade card + math
+// =========================
 function buildTradeCard(best){
   const s = loadSettings();
   const u = UNIVERSE.find(x=>x.t===best.t);
@@ -1205,7 +1301,6 @@ function buildTradeCard(best){
   const shares = Math.max(1, Math.floor(s.cap / entry));
   const notional = round2(shares * entry);
 
-  // Fees & tax
   const feeRoundTrip = round2(2 * s.fee);
   const grossGain = round2((tp - entry) * shares);
   const grossLoss = round2((entry - sl) * shares);
@@ -1214,13 +1309,8 @@ function buildTradeCard(best){
   const netGainAfterTax = round2(netGainBeforeTax - taxAmt);
   const netLossAfterFees = round2(grossLoss + feeRoundTrip);
 
-  // Time stop date (approx)
   const timeStop = addDays(new Date(), Math.round(RULES.timeStopTradingDays * 1.4));
   const catalystWindow = best.events.slice(0,3).map(e=>`${fmtShort(e.dt)} — ${shorten(e.title,52)}`).join(" | ");
-
-  // Sanity gate note
-  const dLow = p.dLow;
-  const extPct = p.extPct;
 
   return {
     ticker: best.t,
@@ -1231,23 +1321,19 @@ function buildTradeCard(best){
     entry, tp, sl, shares, notional,
     feeRoundTrip, grossGain, grossLoss, netGainBeforeTax, taxAmt, netGainAfterTax, netLossAfterFees,
     timeStop,
-    dLow, current:p.current, extPct
+    dLow: p.dLow, current:p.current, extPct: p.extPct
   };
 }
 
 function computeEntry(ticker){
   const u = UNIVERSE.find(x=>x.t===ticker);
   const p = state.prices[ticker];
-  // Simple, explainable pullback entry:
-  // Entry = D-Low + small buffer
   const buffer = (u.kind==="ETF") ? 0.002 : 0.003;
   return round2(p.dLow * (1+buffer));
 }
 
 function buildWatchlist(per, watchOnly, eligible, highlightTicker=""){
   const out = [];
-
-  // include the best near-miss first
   const sorted = eligible.slice().sort((a,b)=>b.sc.score-a.sc.score);
   const top = sorted.slice(0,3);
 
@@ -1267,7 +1353,6 @@ function buildWatchlist(per, watchOnly, eligible, highlightTicker=""){
     });
   }
 
-  // include disqualified/guardrail tickers (compact)
   const extra = watchOnly.slice(0,3);
   for (const w of extra){
     const p = state.prices[w.t];
@@ -1281,7 +1366,6 @@ function buildWatchlist(per, watchOnly, eligible, highlightTicker=""){
     });
   }
 
-  // If we have a highlightTicker (best but blocked), put it first
   if(highlightTicker){
     out.sort((a,b)=>{
       const ah = a.title.startsWith(highlightTicker+" ");
@@ -1293,9 +1377,9 @@ function buildWatchlist(per, watchOnly, eligible, highlightTicker=""){
   return out;
 }
 
-/* ============
-   Desk note (copy/paste)
-   ============ */
+// =========================
+// Desk notes
+// =========================
 function buildDeskNoteNoTrade(reason){
   const now = new Date();
   const lines = [];
@@ -1336,9 +1420,9 @@ function buildDeskNoteTrade(best){
   return lines.join("\n");
 }
 
-/* ============
-   UI rendering
-   ============ */
+// =========================
+// UI rendering
+// =========================
 function renderUniverse(){
   $("#universeCount").textContent = `${UNIVERSE.length} tickers`;
   const box = $("#universeList");
@@ -1403,7 +1487,6 @@ function renderSources(){
 }
 
 function renderEvents(){
-  // Scheduled
   const sBox = $("#scheduledList");
   sBox.innerHTML = "";
   for (const ev of state.scheduled.slice(0,18)){
@@ -1415,11 +1498,9 @@ function renderEvents(){
   }
   $("#scheduledCount").textContent = `${state.scheduled.length} items`;
 
-  // Live
   const lBox = $("#liveList");
   lBox.innerHTML = "";
   for (const ev of state.live.slice(0,12)){
-    // If cluster/pulse includes examples, render expanded
     if(ev.examples && ev.examples.length){
       const wrap = el("div",{class:"item"},[
         el("div",{class:"left"},[
@@ -1495,7 +1576,6 @@ Fees (2 orders):     $${t.feeRoundTrip.toFixed(2)}
 Net loss after fees: $${t.netLossAfterFees.toFixed(2)}
 (Tax not applied to losses here)`;
 
-    // Notes
     $("#sanityNote").style.display = "";
     $("#sanityNote").textContent =
       `Price sanity: Current ${t.current.toFixed(2)} vs D-Low ${t.dLow.toFixed(2)} → extension ${t.extPct.toFixed(2)}% (PASS).`;
@@ -1537,7 +1617,6 @@ Net loss after fees: $${t.netLossAfterFees.toFixed(2)}
       "Guardrail reminder: binary events (CPI/Fed/jobs/earnings) + extension → WATCHLIST only. Prefer post-event EOD confirmation.";
   }
 
-  // Desk note
   state.lastDeskNote = result.desk || buildDeskNoteNoTrade("No decision note");
 }
 
@@ -1549,7 +1628,6 @@ function buildPlainWhy(result){
     ? `${fmtShort(result.pick.sc.next.dt)} — ${shorten(result.pick.sc.next.title, 70)}`
     : "—";
 
-  // Non-trader friendly rationale, explicit & brief
   return `
     <b>Why this (in plain terms):</b>
     There is a <b>time-bounded catalyst</b> coming up (<span class="mono">${escapeHtml(nextLine)}</span>) that can move markets within days.
@@ -1561,99 +1639,146 @@ function buildPlainWhy(result){
   `;
 }
 
-/* ============
-   Orchestration
-   ============ */
+// =========================
+// Orchestration (patched: parallel + progress + never-silent)
+// =========================
 async function runAgent(){
   setBusy(true);
+  setRunUI(true, "INTEL PULL", "Initializing…", "", "If sources fail, the system defaults to NO TRADE.");
+
   state.sources = {};
   state.scheduled = [];
   state.live = [];
   state.prices = {};
+  renderSources();
+  renderUniverse();
+  renderGatePreview();
 
-  // Prices first (sanity gate depends on them)
+  // Phase 1: Prices (fast baseline)
   try{
-    const prices = await Promise.race([fetchAllPrices(), timeout(45000)]);
+    setRunUI(true, "Prices", "Starting price pull…", `0/${UNIVERSE.length}`, "Using Stooq daily close + D-Low (quote only in intraday mode).");
+    state.sources.prices = {status:"warn", note:"running…"};
+    renderSources();
+
+    const prices = await fetchAllPrices();
     state.prices = prices;
-    state.sources.prices = {status:"ok", note:"ok"};
+
+    const okCount = Object.values(prices).filter(x=>x && x.ok).length;
+    const sampleErr = firstPriceError();
+    state.sources.prices = okCount > 0
+      ? {status: okCount >= Math.floor(UNIVERSE.length*0.6) ? "ok" : "warn", note: `${okCount}/${UNIVERSE.length} ok` }
+      : {status:"bad", note: `0/${UNIVERSE.length} ok${sampleErr ? " (CORS?)" : ""}`};
+
   }catch(e){
     state.sources.prices = {status:"bad", note:"failed"};
   }
+  renderSources();
+  renderUniverse();
+  renderGatePreview();
 
-  // Scheduled: BLS + Auctions + optional FMP earnings
+  // Phase 2: Scheduled (parallel)
+  setRunUI(true, "Scheduled catalysts", "Fetching BLS + Treasury + Earnings…", "", "These are time-bounded catalysts (next 14 days).");
   const s = loadSettings();
 
+  const scheduledRuns = await Promise.allSettled([
+    fetchBLSCalendar(14),
+    fetchTreasuryAuctions(14),
+    fetchEarningsFMP(14, s.fmpKey || "")
+  ]);
+
   // BLS
-  try{
-    const bls = await Promise.race([fetchBLSCalendar(14), timeout(12000)]);
+  if(scheduledRuns[0].status==="fulfilled"){
+    const bls = scheduledRuns[0].value;
     state.scheduled.push(...bls);
     state.sources.bls = {status:"ok", note:`${bls.length} items`};
-  }catch(e){
+  }else{
     state.sources.bls = {status:"bad", note:"failed"};
   }
 
-  // Auctions
-  try{
-    const auc = await Promise.race([fetchTreasuryAuctions(14), timeout(12000)]);
+  // Auctions (best-effort)
+  if(scheduledRuns[1].status==="fulfilled"){
+    const auc = scheduledRuns[1].value;
     state.scheduled.push(...auc);
     state.sources.auctions = {status:"ok", note:`${auc.length} items`};
-  }catch(e){
+  }else{
     state.sources.auctions = {status:"warn", note:"unavailable"};
   }
 
-  // Earnings (optional via FMP)
-  try{
-    const ear = await Promise.race([fetchEarningsFMP(14, s.fmpKey || ""), timeout(12000)]);
-    state.scheduled.push(...ear);
-    state.sources.earnings = (s.fmpKey && ear.length>=0) ? {status:"ok", note:`${ear.length} items`} : {status:"warn", note:"(optional) add key"};
-  }catch(e){
-    state.sources.earnings = s.fmpKey ? {status:"warn", note:"failed"} : {status:"warn", note:"(optional) add key"};
+  // Earnings (optional)
+  if(s.fmpKey){
+    if(scheduledRuns[2].status==="fulfilled"){
+      const ear = scheduledRuns[2].value;
+      state.scheduled.push(...ear);
+      state.sources.earnings = {status:"ok", note:`${ear.length} items`};
+    }else{
+      state.sources.earnings = {status:"warn", note:"failed"};
+    }
+  }else{
+    state.sources.earnings = {status:"warn", note:"(optional) add key"};
   }
 
-  // Normalize + sort scheduled
   state.scheduled = state.scheduled
     .filter(x=>x && x.dt && !Number.isNaN(+x.dt))
     .sort((a,b)=>a.dt-b.dt);
 
-  // Live: GDELT + CISA + USGS
-  try{
-    const gd = await Promise.race([fetchGDELTLive(48), timeout(12000)]);
+  renderSources();
+  renderEvents();
+
+  // Phase 3: Live triggers (parallel)
+  setRunUI(true, "Live triggers", "Fetching GDELT + CISA + USGS…", "", "Live headlines are support-only (not forced trades).");
+
+  const liveRuns = await Promise.allSettled([
+    fetchGDELTLive(48),
+    fetchCISARSS(14),
+    fetchUSGSEarthquakes()
+  ]);
+
+  if(liveRuns[0].status==="fulfilled"){
+    const gd = liveRuns[0].value;
     state.live.push(...gd);
-    state.sources.gdelt = {status:"ok", note:"ok"};
-  }catch(e){
+    state.sources.gdelt = {status:"ok", note:`${gd.length} items`};
+  }else{
     state.sources.gdelt = {status:"warn", note:"unavailable"};
   }
-  try{
-    const cisa = await Promise.race([fetchCISARSS(14), timeout(12000)]);
+
+  if(liveRuns[1].status==="fulfilled"){
+    const cisa = liveRuns[1].value;
     state.live.push(...cisa);
     state.sources.cisa = {status:"ok", note:`${cisa.length} items`};
-  }catch(e){
+  }else{
     state.sources.cisa = {status:"warn", note:"unavailable"};
   }
-  try{
-    const usgs = await Promise.race([fetchUSGSEarthquakes(), timeout(12000)]);
+
+  if(liveRuns[2].status==="fulfilled"){
+    const usgs = liveRuns[2].value;
     state.live.push(...usgs);
     state.sources.usgs = {status:"ok", note:`${usgs.length} items`};
-  }catch(e){
+  }else{
     state.sources.usgs = {status:"warn", note:"unavailable"};
   }
 
-  // Sort live (newest first)
   state.live = state.live
     .filter(x=>x && x.dt && !Number.isNaN(+x.dt))
     .sort((a,b)=>b.dt-a.dt);
 
-  // Render base UI blocks
   renderSources();
-  renderUniverse();
-  renderGatePreview();
   renderEvents();
 
-  // Decide
+  // Phase 4: Decide
+  setRunUI(true, "Decision", "Applying Price Sanity Gate + catalyst scoring…", "", "Default is NO TRADE unless edge is clear.");
   const result = chooseOneTrade();
   renderDecision(result);
 
+  setRunUI(false);
   setBusy(false);
+}
+
+function firstPriceError(){
+  for(const t of UNIVERSE.map(x=>x.t)){
+    const p = state.prices[t];
+    if(p && p.ok===false && p.err) return shorten(p.err, 70);
+  }
+  return "";
 }
 
 function setBusy(on){
@@ -1661,14 +1786,14 @@ function setBusy(on){
   $("#btnRun").textContent = on ? "Refreshing…" : "Refresh Intel & Decide";
 }
 
-/* ============
-   Render helpers
-   ============ */
+// =========================
+// Render helpers
+// =========================
 function renderEventItem(ev, tags){
   const link = ev.url ? el("a",{href:ev.url, target:"_blank", rel:"noopener"},[document.createTextNode(shorten(ev.title, 110))])
                       : document.createTextNode(shorten(ev.title, 110));
   const subtitle = `${ev.kind} · ${ev.source}`;
-  const item = el("div",{class:"item"},[
+  return el("div",{class:"item"},[
     el("div",{class:"left"},[
       el("p",{class:"t"},[link]),
       el("p",{class:"m"},[document.createTextNode(subtitle)]),
@@ -1679,14 +1804,12 @@ function renderEventItem(ev, tags){
     ]),
     el("div",{class:"when"},[document.createTextNode(fmtShort(ev.dt))])
   ]);
-  return item;
 }
 
-/* ============
-   ICS parser (minimal)
-   ============ */
+// =========================
+// ICS parser (minimal)
+// =========================
 function parseICS(ics){
-  // Unfold lines
   const lines = ics.replace(/\r\n/g,"\n").split("\n");
   const unfolded = [];
   for (let i=0;i<lines.length;i++){
@@ -1725,25 +1848,22 @@ function parseICS(ics){
 }
 
 function parseICSTime(v, params){
-  // date-only: YYYYMMDD
   if((params||"").includes("VALUE=DATE") || /^\d{8}$/.test(v)){
     const y=v.slice(0,4), m=v.slice(4,6), d=v.slice(6,8);
     return new Date(`${y}-${m}-${d}T00:00:00`);
   }
-  // datetime: YYYYMMDDTHHMMSSZ or without Z
   const m = v.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/);
   if(m){
     const iso = `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}${m[7]?"Z":""}`;
     return new Date(iso);
   }
-  // fallback
   const d = new Date(v);
   return Number.isNaN(+d) ? null : d;
 }
 
-/* ============
-   Utilities
-   ============ */
+// =========================
+// Utilities
+// =========================
 function $(q){ return document.querySelector(q); }
 function el(tag, attrs={}, children=[]){
   const n = document.createElement(tag);
@@ -1763,13 +1883,12 @@ function textOf(parent, sel){
   return n ? (n.textContent||"").trim() : "";
 }
 function parseCSV(csv){
-  // Simple CSV (Stooq uses uncomplicated CSV)
   const lines = csv.trim().split(/\r?\n/);
   if(lines.length===0) return [];
   const headers = lines[0].split(",").map(h=>h.trim());
   const rows = [];
   for(let i=1;i<lines.length;i++){
-    const cols = lines[i].split(","); // safe for Stooq
+    const cols = lines[i].split(",");
     const obj = {};
     for(let j=0;j<headers.length;j++){
       obj[headers[j]] = (cols[j]||"").trim();
@@ -1814,7 +1933,6 @@ function escapeHtml(str){
     .replaceAll("'","&#039;");
 }
 function fmtGDELT(d){
-  // YYYYMMDDhhmmss
   const y=d.getUTCFullYear();
   const m=String(d.getUTCMonth()+1).padStart(2,"0");
   const da=String(d.getUTCDate()).padStart(2,"0");
@@ -1824,7 +1942,6 @@ function fmtGDELT(d){
   return `${y}${m}${da}${hh}${mm}${ss}`;
 }
 function parseGDELTSeenDate(seen){
-  // often: "20260111123000"
   const m = String(seen||"").match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/);
   if(m){
     return new Date(Date.UTC(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]));
@@ -1833,9 +1950,9 @@ function parseGDELTSeenDate(seen){
   return Number.isNaN(+d) ? new Date() : d;
 }
 
-/* ============
-   Buttons
-   ============ */
+// =========================
+// Buttons
+// =========================
 $("#btnRun").addEventListener("click", runAgent);
 
 $("#btnCopy").addEventListener("click", async ()=>{
@@ -1849,7 +1966,6 @@ $("#btnCopy").addEventListener("click", async ()=>{
     $("#btnCopy").textContent = "Copied";
     setTimeout(()=>$("#btnCopy").textContent="Copy desk note", 900);
   }catch{
-    // fallback
     const ta = document.createElement("textarea");
     ta.value = txt;
     document.body.appendChild(ta);
@@ -1885,9 +2001,9 @@ $("#btnReset").addEventListener("click", ()=>{
   $("#lastRefresh").textContent = "Not refreshed yet";
 });
 
-/* ============
-   Init
-   ============ */
+// =========================
+// Init
+// =========================
 (function init(){
   bindSettingsUI();
   renderSources();
