@@ -1,0 +1,1595 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Speculative Trading Smart Agent — One Trade</title>
+  <style>
+    :root{
+      --bg:#0b0f17;
+      --panel:#101826;
+      --panel2:#0f1a2a;
+      --text:#e8eefc;
+      --muted:#a9b7d6;
+      --line:#20314d;
+      --good:#22c55e;
+      --warn:#f59e0b;
+      --bad:#ef4444;
+      --chip:#16243a;
+      --btn:#1c2f4a;
+      --btn2:#223a5a;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Liberation Sans", sans-serif;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; background:linear-gradient(180deg, #070a10 0%, var(--bg) 45%, #070a10 100%);
+      color:var(--text); font-family:var(--sans);
+    }
+    .wrap{max-width:1200px; margin:0 auto; padding:18px}
+    header{
+      display:flex; gap:12px; align-items:stretch; flex-wrap:wrap;
+    }
+    .card{
+      background:rgba(16,24,38,0.9);
+      border:1px solid rgba(32,49,77,0.75);
+      border-radius:14px;
+      padding:14px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+    }
+    .topbar{flex:1; min-width:320px}
+    .activeTrade{flex:2; min-width:380px}
+    h1{margin:0 0 8px 0; font-size:18px; letter-spacing:0.2px}
+    h2{margin:0 0 10px 0; font-size:14px; color:var(--muted); font-weight:650}
+    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+    .col{display:flex; flex-direction:column; gap:8px}
+    .spacer{flex:1}
+    .pill{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:7px 10px; border-radius:999px;
+      background:rgba(22,36,58,0.9);
+      border:1px solid rgba(32,49,77,0.75);
+      color:var(--muted); font-size:12px;
+    }
+    .badge{
+      display:inline-flex; align-items:center; justify-content:center;
+      height:26px; padding:0 10px; border-radius:999px;
+      font-size:12px; font-weight:750; letter-spacing:0.2px;
+      border:1px solid rgba(32,49,77,0.75);
+      background:rgba(15,26,42,0.8);
+    }
+    .good{color:var(--good); border-color:rgba(34,197,94,0.35)}
+    .warn{color:var(--warn); border-color:rgba(245,158,11,0.35)}
+    .bad{color:var(--bad); border-color:rgba(239,68,68,0.35)}
+    .btn{
+      cursor:pointer;
+      background:linear-gradient(180deg, var(--btn) 0%, #142238 100%);
+      color:var(--text);
+      border:1px solid rgba(32,49,77,0.85);
+      border-radius:10px;
+      padding:10px 12px;
+      font-weight:700;
+      transition:transform 0.05s ease, background 0.2s ease;
+      user-select:none;
+    }
+    .btn:hover{background:linear-gradient(180deg, var(--btn2) 0%, #142238 100%)}
+    .btn:active{transform:translateY(1px)}
+    .btn.red{border-color:rgba(239,68,68,0.6)}
+    .btn.green{border-color:rgba(34,197,94,0.6)}
+    .btn.gray{opacity:0.75}
+    .btn.small{padding:8px 10px; border-radius:10px; font-size:12px}
+    input[type="text"], input[type="number"]{
+      background:rgba(10,15,25,0.65);
+      border:1px solid rgba(32,49,77,0.85);
+      color:var(--text);
+      border-radius:10px;
+      padding:10px 12px;
+      outline:none;
+      width:100%;
+      font-size:14px;
+    }
+    input[type="range"]{width:220px}
+    .grid{
+      display:grid; gap:12px;
+      grid-template-columns: 1.2fr 1.8fr;
+      margin-top:12px;
+    }
+    @media(max-width:980px){ .grid{grid-template-columns:1fr} }
+
+    .watchlistChips{display:flex; gap:8px; flex-wrap:wrap; margin-top:10px}
+    .chip{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:7px 10px; border-radius:999px;
+      background:rgba(22,36,58,0.9);
+      border:1px solid rgba(32,49,77,0.75);
+      font-size:12px; color:var(--text);
+    }
+    .chip button{
+      cursor:pointer;
+      border:none; background:transparent; color:var(--muted);
+      font-weight:900; font-size:14px; line-height:1;
+    }
+
+    .sectionTitle{
+      display:flex; align-items:center; justify-content:space-between;
+      gap:10px; margin-bottom:10px;
+    }
+
+    table{
+      width:100%;
+      border-collapse:separate;
+      border-spacing:0;
+      overflow:hidden;
+      border:1px solid rgba(32,49,77,0.75);
+      border-radius:14px;
+      background:rgba(15,26,42,0.55);
+    }
+    th, td{
+      padding:10px 10px;
+      border-bottom:1px solid rgba(32,49,77,0.5);
+      font-size:12px;
+      vertical-align:top;
+    }
+    th{
+      text-align:left;
+      color:var(--muted);
+      font-weight:800;
+      background:rgba(16,24,38,0.85);
+      position:sticky; top:0;
+      z-index:1;
+    }
+    tr:last-child td{border-bottom:none}
+    .mono{font-family:var(--mono)}
+    .muted{color:var(--muted)}
+    .tiny{font-size:11px}
+    .kpi{display:flex; gap:10px; flex-wrap:wrap; margin-top:8px}
+    .kpi .pill{font-size:11px}
+    .hr{height:1px; background:rgba(32,49,77,0.6); margin:10px 0}
+    .calendarStrip{
+      display:flex; gap:10px; flex-wrap:wrap;
+      align-items:center;
+      padding-top:6px;
+    }
+    .calItem{
+      min-width:220px;
+      padding:10px 12px;
+      border-radius:14px;
+      border:1px solid rgba(32,49,77,0.75);
+      background:rgba(15,26,42,0.55);
+    }
+    .calItem b{display:block; margin-bottom:4px}
+    .decision{
+      display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+      padding:12px;
+      border-radius:14px;
+      border:1px solid rgba(32,49,77,0.75);
+      background:rgba(15,26,42,0.55);
+      margin-bottom:10px;
+    }
+    .decision .big{
+      font-size:18px; font-weight:900; letter-spacing:0.3px;
+    }
+    .tradeCard{
+      border:1px solid rgba(32,49,77,0.75);
+      border-radius:14px;
+      padding:12px;
+      background:rgba(16,24,38,0.75);
+    }
+    .tradeCard .line{
+      display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-top:6px;
+    }
+    .tradeCard .line > div{min-width:220px}
+    .callout{
+      padding:10px 12px;
+      border-radius:14px;
+      background:rgba(22,36,58,0.7);
+      border:1px solid rgba(32,49,77,0.75);
+    }
+    .footerNote{margin-top:12px; color:var(--muted); font-size:12px}
+    .lockNote{
+      display:inline-flex; gap:8px; align-items:center;
+      padding:6px 10px;
+      border-radius:999px;
+      background:rgba(239,68,68,0.08);
+      border:1px solid rgba(239,68,68,0.35);
+      color:var(--bad);
+      font-size:12px; font-weight:800;
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="card topbar">
+      <h1>Speculative Trading Smart Agent</h1>
+      <div class="row">
+        <span class="pill"><span class="muted">Mode</span>
+          <label class="row tiny" style="gap:6px; margin-left:6px;">
+            <input type="radio" name="mode" value="EOD" checked> EOD
+          </label>
+          <label class="row tiny" style="gap:6px;">
+            <input type="radio" name="mode" value="INTRADAY"> Intraday
+          </label>
+        </span>
+        <span class="pill"><span class="muted">Data pulled</span> <span id="pulledAt" class="mono">—</span></span>
+        <span class="pill"><span class="muted">Status</span> <span id="statusBadge" class="badge">READY</span></span>
+        <span class="spacer"></span>
+        <button class="btn" id="runBtn">RUN — pick ONE trade</button>
+      </div>
+      <div class="kpi">
+        <span class="pill"><span class="muted">Free sources</span> GDELT • Stooq • BLS • FiscalData</span>
+        <span class="pill"><span class="muted">Rule</span> ONE active trade only</span>
+        <span class="pill"><span class="muted">Orders</span> LIMIT only</span>
+        <span class="pill"><span class="muted">Default</span> NO TRADE unless rules pass</span>
+      </div>
+      <div class="footerNote">
+        This is a front-end-only prototype. Some sources may block direct browser calls.
+        This page automatically uses a public text proxy fallback (r.jina.ai) if needed.
+      </div>
+    </div>
+
+    <div class="card activeTrade" id="activeTradeCard">
+      <div class="sectionTitle">
+        <div>
+          <h1 style="margin-bottom:2px;">Active Trade</h1>
+          <div class="muted tiny">If active: new trades are locked. Manage only.</div>
+        </div>
+        <div id="tradeLock" class="lockNote" style="display:none;">NEW TRADES LOCKED</div>
+      </div>
+
+      <div id="noActiveTrade" class="callout">
+        <b>No active trade.</b>
+        <div class="tiny muted">When a Trade Card is accepted, it will appear here with a time-stop countdown.</div>
+      </div>
+
+      <div id="activeTradePanel" style="display:none;">
+        <div class="row" style="align-items:flex-start;">
+          <div class="col" style="min-width:250px;">
+            <div class="pill"><span class="muted">Instrument</span> <span id="at_symbol" class="mono">—</span></div>
+            <div class="pill"><span class="muted">Entry</span> <span id="at_entry" class="mono">—</span></div>
+            <div class="pill"><span class="muted">Stop</span> <span id="at_stop" class="mono">—</span></div>
+            <div class="pill"><span class="muted">Target zone</span> <span id="at_target" class="mono">—</span></div>
+          </div>
+
+          <div class="col" style="min-width:250px;">
+            <div class="pill"><span class="muted">Activation expires</span> <span id="at_activation" class="mono">—</span></div>
+            <div class="pill"><span class="muted">Time-stop</span> <span id="at_timestop" class="mono">—</span></div>
+            <div class="pill"><span class="muted">Sessions left</span> <span id="at_sessionsLeft" class="mono">—</span></div>
+          </div>
+
+          <div class="col" style="min-width:240px;">
+            <button class="btn small gray" id="btnCloseTrade">Close trade (manual)</button>
+            <button class="btn small red" id="btnStopHit">Stop hit</button>
+            <button class="btn small green" id="btnTargetHit">Target hit</button>
+          </div>
+        </div>
+        <div class="hr"></div>
+        <div class="tiny muted" id="at_note">—</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="card">
+      <div class="sectionTitle">
+        <div>
+          <h1 style="margin-bottom:2px;">Watchlist (your only manual work)</h1>
+          <div class="tiny muted">Add tickers. The agent will focus on only 3–5 each run.</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <input id="tickerInput" type="text" placeholder="Add tickers: XLF MSFT AAPL SMH ..." />
+        <button class="btn" id="addTickerBtn">Add</button>
+      </div>
+
+      <div class="row" style="margin-top:10px;">
+        <span class="pill"><span class="muted">Max tracked</span>
+          <input id="maxTracked" type="number" min="3" max="50" step="1" value="20" style="width:90px; margin-left:8px;">
+        </span>
+        <button class="btn small gray" id="clearBtn">Clear</button>
+        <button class="btn small gray" id="seedBtn">Seed common</button>
+      </div>
+
+      <div class="watchlistChips" id="watchlistChips"></div>
+
+      <div class="hr"></div>
+
+      <div class="sectionTitle">
+        <div>
+          <h1 style="margin-bottom:2px;">Israel net math</h1>
+          <div class="tiny muted">Fees & tax are always shown on a Trade Card.</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <span class="pill"><span class="muted">Position size</span>
+          <input id="posSize" type="range" min="1000" max="2000" value="1500" step="50" />
+          <span id="posSizeVal" class="mono">1500</span>
+        </span>
+        <span class="pill"><span class="muted">Fees</span> <span class="mono">$8</span> per order (<span class="mono">$16</span> round-trip)</span>
+        <span class="pill"><span class="muted">Tax</span> <span class="mono">25%</span> on gains</span>
+      </div>
+
+      <div class="footerNote">
+        Net profit = (GrossProfit − 16) × 0.75<br/>
+        Net loss = GrossLoss + 16
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="sectionTitle">
+        <div>
+          <h1 style="margin-bottom:2px;">Catalyst calendar strip (auto)</h1>
+          <div class="tiny muted">Next known macro releases + upcoming Treasury auctions. Used for “binary” guardrails.</div>
+        </div>
+        <span id="macroBadge" class="badge">—</span>
+      </div>
+
+      <div class="calendarStrip" id="calendarStrip"></div>
+
+      <div class="hr"></div>
+
+      <div class="sectionTitle">
+        <div>
+          <h1 style="margin-bottom:2px;">Output</h1>
+          <div class="tiny muted">GREEN-only ranking → TRADE or NO TRADE. Plain language. Exact math.</div>
+        </div>
+      </div>
+
+      <div id="outputArea">
+        <div class="decision">
+          <div class="big">Click <span class="mono">RUN</span> to generate a decision.</div>
+          <span class="badge">TRADE / NO TRADE</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:12px;">
+    <div class="sectionTitle">
+      <div>
+        <h1 style="margin-bottom:2px;">Auto-data table (watchlist)</h1>
+        <div class="tiny muted">Close, Low(prev), Low(5d), AvgVol, Extension%, Light. Uses Stooq daily candles (auto).</div>
+      </div>
+      <span class="pill"><span class="muted">Focus</span> <span id="focusList" class="mono">—</span></span>
+    </div>
+
+    <div style="overflow:auto; max-height:460px;">
+      <table>
+        <thead>
+          <tr>
+            <th style="min-width:110px;">Ticker</th>
+            <th>Type</th>
+            <th class="mono">Close</th>
+            <th class="mono">Low(prev)</th>
+            <th class="mono">Low(5d)</th>
+            <th class="mono">Ext% math</th>
+            <th>Light</th>
+            <th>Price sanity</th>
+            <th>Liquidity</th>
+            <th>GDELT heat</th>
+            <th style="min-width:320px;">Top headlines (GDELT)</th>
+          </tr>
+        </thead>
+        <tbody id="dataTbody">
+          <tr><td colspan="11" class="muted">No data yet.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="footerNote">
+      Final principle: <b>Price validity overrides catalyst quality.</b> Prefer <b>NO TRADE</b> to weak setups.
+    </div>
+  </div>
+
+</div>
+
+<script>
+/**
+ * SPECULATIVE TRADING AIDE — front-end-only prototype
+ * - One active trade at a time (localStorage)
+ * - Auto fetch data from free sources:
+ *   - Stooq CSV for daily candles
+ *   - GDELT DOC 2.0 for headlines + volume
+ *   - BLS schedule pages for CPI/Jobs
+ *   - US Treasury FiscalData upcoming_auctions endpoint for auctions
+ *
+ * Important: Browser CORS can block some sources.
+ * This app attempts direct fetch, then uses r.jina.ai proxy fallback.
+ */
+
+const LS_KEYS = {
+  watchlist: "sta_watchlist_v1",
+  activeTrade: "sta_active_trade_v1",
+  cache: "sta_cache_v1",
+};
+
+const COMMON_SEED = ["SPY","QQQ","IWM","TLT","XLF","XLE","SMH","GLD","USO","XLI","AAPL","MSFT","NVDA","AMZN","GOOGL","META","TSLA","JPM","XOM","LMT"];
+
+const BROAD_ETFS = new Set(["SPY","QQQ","IWM","DIA","VTI"]);
+const KNOWN_ETFS = new Set(["SPY","QQQ","IWM","DIA","VTI","XLF","XLE","XLI","XLY","XLP","XLV","XLK","XLU","XLB","SMH","SOXX","TLT","IEF","HYG","LQD","GLD","SLV","USO","UNG","EEM","EWJ","FXI","ARKK","ITA","XOP","KRE"]);
+
+const ALIAS = {
+  "AAPL":"Apple",
+  "MSFT":"Microsoft",
+  "NVDA":"Nvidia",
+  "AMZN":"Amazon",
+  "GOOGL":"Google OR Alphabet",
+  "META":"Meta OR Facebook",
+  "TSLA":"Tesla",
+  "JPM":"JPMorgan",
+  "XOM":"Exxon",
+  "LMT":"Lockheed",
+  "SMH":"semiconductor ETF",
+  "XLF":"financial ETF",
+  "XLE":"energy ETF",
+  "TLT":"long term treasuries ETF",
+  "ITA":"aerospace defense ETF",
+};
+
+const $ = (id) => document.getElementById(id);
+
+function nowISO() {
+  const d = new Date();
+  return d.toLocaleString(undefined, {year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit"});
+}
+
+function clamp(n, a, b){ return Math.max(a, Math.min(b, n)); }
+
+function loadJSON(key, fallback){
+  try {
+    const s = localStorage.getItem(key);
+    if (!s) return fallback;
+    return JSON.parse(s);
+  } catch { return fallback; }
+}
+
+function saveJSON(key, value){
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function uniqUpper(arr){
+  const seen = new Set();
+  const out = [];
+  for (const x of arr){
+    const t = String(x).trim().toUpperCase();
+    if (!t) continue;
+    if (!seen.has(t)){
+      seen.add(t);
+      out.push(t);
+    }
+  }
+  return out;
+}
+
+function parseTickersFromText(txt){
+  return uniqUpper(txt.split(/[\s,;]+/g).filter(Boolean));
+}
+
+function toStooqSymbol(tickerUpper){
+  // Default: US listing on Stooq, append .US if no suffix.
+  // Stooq expects lower-case.
+  const t = tickerUpper.trim();
+  if (!t) return "";
+  if (t.includes(".")) return t.toLowerCase();
+  return (t + ".us").toLowerCase();
+}
+
+function classifyType(tickerUpper){
+  return KNOWN_ETFS.has(tickerUpper) ? "ETF" : "STOCK";
+}
+
+function fmt(n, digits=2){
+  if (n === null || n === undefined || Number.isNaN(n)) return "—";
+  return Number(n).toFixed(digits);
+}
+
+function fmtInt(n){
+  if (n === null || n === undefined || Number.isNaN(n)) return "—";
+  return Math.round(Number(n)).toLocaleString();
+}
+
+function daysBetween(d1, d2){
+  // whole days
+  const ms = 24*3600*1000;
+  return Math.floor((d2.getTime() - d1.getTime())/ms);
+}
+
+function isWeekend(d){
+  const day = d.getDay(); // 0 Sun .. 6 Sat
+  return day === 0 || day === 6;
+}
+
+function addTradingDays(startDate, n){
+  // Trading days = weekdays. (Simple, no US holidays.)
+  let d = new Date(startDate);
+  let left = n;
+  while (left > 0){
+    d.setDate(d.getDate() + 1);
+    if (!isWeekend(d)) left--;
+  }
+  return d;
+}
+
+function trafficLight(type, extensionPct){
+  // Extension% = (Close - Low5d)/Low5d * 100
+  if (extensionPct === null || Number.isNaN(extensionPct)) return {light:"—", cls:"badge"};
+  if (type === "ETF"){
+    if (extensionPct <= 3.0) return {light:"GREEN", cls:"badge good"};
+    if (extensionPct <= 4.5) return {light:"AMBER", cls:"badge warn"};
+    return {light:"RED", cls:"badge bad"};
+  } else {
+    if (extensionPct <= 4.0) return {light:"GREEN", cls:"badge good"};
+    if (extensionPct <= 6.0) return {light:"AMBER", cls:"badge warn"};
+    return {light:"RED", cls:"badge bad"};
+  }
+}
+
+function priceSanity(close, lowPrev, low5){
+  // simple sanity rules
+  const problems = [];
+  if (![close, lowPrev, low5].every(x => typeof x === "number" && isFinite(x) && x > 0)) problems.push("missing/invalid");
+  if (typeof close === "number" && typeof low5 === "number" && close < low5) problems.push("Close < Low(5d)");
+  if (typeof lowPrev === "number" && typeof low5 === "number" && lowPrev < low5 && (low5 - lowPrev) / low5 > 0.3) problems.push("Low(prev) far below Low(5d)?");
+  return problems;
+}
+
+function grossNetMath(positionSize, entry, stop, target){
+  const shares = positionSize / entry;
+  const grossProfit = shares * (target - entry);
+  const grossLoss   = shares * (entry - stop);
+  const netProfit = (grossProfit - 16) * 0.75;
+  const netLoss = grossLoss + 16;
+  return {shares, grossProfit, grossLoss, netProfit, netLoss};
+}
+
+// ---------- Caching ----------
+function getCache(){
+  return loadJSON(LS_KEYS.cache, {});
+}
+function setCache(cache){
+  saveJSON(LS_KEYS.cache, cache);
+}
+function cacheGet(key){
+  const c = getCache();
+  return c[key] || null;
+}
+function cacheSet(key, value){
+  const c = getCache();
+  c[key] = value;
+  setCache(c);
+}
+
+// ---------- Fetch helpers ----------
+async function corsFetch(url, opts={}, {ttlMs=0, cacheKey=null}={}){
+  // Cache by cacheKey if provided.
+  if (cacheKey && ttlMs > 0){
+    const hit = cacheGet(cacheKey);
+    if (hit && hit.t && (Date.now() - hit.t) < ttlMs){
+      return hit.v;
+    }
+  }
+
+  async function tryFetch(u){
+    const res = await fetch(u, opts);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.text();
+  }
+
+  let text;
+  try {
+    text = await tryFetch(url);
+  } catch (e1){
+    // Proxy fallback: r.jina.ai (public text proxy)
+    const prox = "https://r.jina.ai/" + url;
+    text = await tryFetch(prox);
+  }
+
+  if (cacheKey && ttlMs > 0){
+    cacheSet(cacheKey, {t: Date.now(), v: text});
+  }
+  return text;
+}
+
+async function corsFetchJSON(url, opts={}, {ttlMs=0, cacheKey=null}={}){
+  const txt = await corsFetch(url, opts, {ttlMs, cacheKey});
+  // Sometimes proxy adds extra lines; try to find JSON start.
+  const firstBrace = Math.min(
+    ...["{","["].map(ch => {
+      const i = txt.indexOf(ch);
+      return i === -1 ? 1e9 : i;
+    })
+  );
+  const cleaned = (firstBrace < 1e9) ? txt.slice(firstBrace) : txt;
+  return JSON.parse(cleaned);
+}
+
+// ---------- Stooq price fetch ----------
+function parseCSV(text){
+  // Handles BOM and weird proxy headers.
+  const lines = text.replace(/\uFEFF/g,"").split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  // Find header line with commas and "Date" or "Open"
+  let start = 0;
+  for (let i=0;i<Math.min(lines.length,8);i++){
+    if (lines[i].includes(",") && /Date/i.test(lines[i])) { start = i; break; }
+  }
+  const rows = lines.slice(start);
+  const header = rows[0].split(",").map(s=>s.trim());
+  const out = [];
+  for (let i=1;i<rows.length;i++){
+    const cols = rows[i].split(",").map(s=>s.trim());
+    if (cols.length < header.length) continue;
+    const obj = {};
+    for (let j=0;j<header.length;j++) obj[header[j]] = cols[j];
+    out.push(obj);
+  }
+  return {header, out};
+}
+
+async function fetchDailyCandlesStooq(tickerUpper){
+  const sym = toStooqSymbol(tickerUpper);
+  const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(sym)}&i=d`;
+  const txt = await corsFetch(url, {}, {ttlMs: 10*60*1000, cacheKey:`stooq_d_${sym}`});
+  const {out} = parseCSV(txt);
+  // Stooq returns oldest->newest
+  const candles = out
+    .map(r => ({
+      date: r.Date,
+      open: Number(r.Open),
+      high: Number(r.High),
+      low:  Number(r.Low),
+      close:Number(r.Close),
+      volume: Number(r.Volume),
+    }))
+    .filter(c => c.date && isFinite(c.close));
+  return candles;
+}
+
+async function fetchLastQuoteStooq(tickerUpper){
+  // Uses Stooq "q/l" CSV (often used in coding exercises)
+  const sym = toStooqSymbol(tickerUpper);
+  const url = `https://stooq.com/q/l/?s=${encodeURIComponent(sym)}&f=sd2t2ohlcv&h&e=csv`;
+  const txt = await corsFetch(url, {}, {ttlMs: 2*60*1000, cacheKey:`stooq_l_${sym}`});
+  const {out} = parseCSV(txt);
+  if (!out.length) return null;
+  const r = out[0];
+  // columns depend on f=... but should include Close, Low, etc
+  // We'll be defensive:
+  const keys = Object.keys(r);
+  // Try common column names:
+  const close = Number(r.Close ?? r.CLOSE ?? r.close);
+  const date  = String(r.Date ?? r.DATE ?? r.date ?? "");
+  const time  = String(r.Time ?? r.TIME ?? r.time ?? "");
+  return {
+    date, time,
+    open: Number(r.Open ?? r.open),
+    high: Number(r.High ?? r.high),
+    low:  Number(r.Low ?? r.low),
+    close,
+    volume: Number(r.Volume ?? r.volume),
+  };
+}
+
+// ---------- GDELT ----------
+function gdeltDateTimeUTCMinusHours(hours){
+  const d = new Date(Date.now() - hours*3600*1000);
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth()+1).padStart(2,"0");
+  const dd = String(d.getUTCDate()).padStart(2,"0");
+  const hh = String(d.getUTCHours()).padStart(2,"0");
+  const mi = String(d.getUTCMinutes()).padStart(2,"0");
+  const ss = String(d.getUTCSeconds()).padStart(2,"0");
+  return `${yyyy}${mm}${dd}${hh}${mi}${ss}`;
+}
+
+async function gdeltTimelineVolRaw(query, hours=72){
+  const start = gdeltDateTimeUTCMinusHours(hours);
+  const end = gdeltDateTimeUTCMinusHours(0);
+  const url = `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(query)}&mode=timelinevolraw&format=json&startdatetime=${start}&enddatetime=${end}&timelinesmooth=0`;
+  const json = await corsFetchJSON(url, {}, {ttlMs: 10*60*1000, cacheKey:`gdelt_tv_${hours}_${query}`});
+  // Sum volume:
+  const timeline = json.timeline || [];
+  const total = timeline.reduce((a,x)=>a + Number(x.value || 0), 0);
+  return {total, timeline};
+}
+
+async function gdeltTopArticles(query, max=8, hours=72){
+  const start = gdeltDateTimeUTCMinusHours(hours);
+  const end = gdeltDateTimeUTCMinusHours(0);
+  const url = `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(query)}&mode=ArtList&format=json&startdatetime=${start}&enddatetime=${end}&maxrecords=${max}&sort=HybridRel`;
+  const json = await corsFetchJSON(url, {}, {ttlMs: 10*60*1000, cacheKey:`gdelt_al_${hours}_${max}_${query}`});
+  const arts = (json.articles || []).map(a => ({
+    title: a.title,
+    url: a.url,
+    seen: a.seendate,
+    domain: a.domain
+  }));
+  return arts;
+}
+
+function buildGdeltQuery(tickerUpper){
+  const alias = ALIAS[tickerUpper];
+  if (alias) return `(${tickerUpper} OR "${alias}")`;
+  // Fallback: use ticker as keyword.
+  return `"${tickerUpper}"`;
+}
+
+function catalystHeuristics(headlines){
+  // Very simple binary-ish keyword scan for "surprise" and "timing"
+  const txt = headlines.map(h => (h.title || "")).join(" ").toLowerCase();
+  const has = (re) => re.test(txt);
+  const surprise = has(/\b(unexpected|surge|plunge|beats|misses|downgrade|upgrade|ban|sanction|tariff|strike|attack|lawsuit|court|probe|recall|breakthrough|approval|denied)\b/);
+  const macro = has(/\b(fed|fomc|cpi|ppi|jobs report|payrolls|inflation|rates)\b/);
+  const energy = has(/\b(opec|oil|brent|wti|refinery|gas)\b/);
+  const chips = has(/\b(semiconductor|chip|ai|gpu)\b/);
+  const geo = has(/\b(iran|china|russia|israel|gaza|ukraine|taiwan|red sea)\b/);
+  return {surprise, macro, energy, chips, geo};
+}
+
+// ---------- Macro calendar ----------
+async function fetchBLSEventNext(url, label){
+  // Extract the earliest upcoming date/time from a BLS schedule page
+  // Example pages:
+  //  - https://www.bls.gov/schedule/news_release/cpi.htm
+  //  - https://www.bls.gov/schedule/news_release/empsit.htm
+  const html = await corsFetch(url, {}, {ttlMs: 6*60*60*1000, cacheKey:`bls_${label}`});
+  // Parse with DOMParser
+  const doc = new DOMParser().parseFromString(html, "text/html");
+
+  // Try to find a table row that contains a future date (Month Day, Year)
+  const today = new Date();
+  const rows = Array.from(doc.querySelectorAll("table tr"));
+  const candidates = [];
+  for (const tr of rows){
+    const tds = Array.from(tr.querySelectorAll("td")).map(td => td.textContent.replace(/\s+/g," ").trim());
+    if (tds.length < 2) continue;
+    // Find a date-like cell
+    const dateCell = tds.find(x => /, \d{4}$/.test(x) && /^[A-Za-z]+ \d{1,2}, \d{4}$/.test(x));
+    if (!dateCell) continue;
+    const timeCell = tds.find(x => /\b(AM|PM)\b/.test(x)) || "";
+    const d = new Date(dateCell + " " + (timeCell || "00:00 AM"));
+    if (isNaN(d.getTime())) continue;
+    if (d.getTime() >= today.getTime() - 12*3600*1000){
+      candidates.push({date: d, dateStr: dateCell, timeStr: timeCell});
+    }
+  }
+  candidates.sort((a,b)=>a.date-b.date);
+  if (!candidates.length) return {label, dateStr:"—", timeStr:"—", note:"(could not parse)"};
+  const c = candidates[0];
+  return {label, dateStr: c.dateStr, timeStr: c.timeStr || "—", note:"BLS"};
+}
+
+async function fetchUpcomingAuctions(max=4){
+  // FiscalData: upcoming_auctions endpoint
+  // Example seen in the wild:
+  // https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/od/upcoming_auctions?...
+  const base = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/od/upcoming_auctions";
+  const fields = "security_type,security_term,auction_date,issue_date,offering_amount";
+  // Filter: auction_date >= today
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth()+1).padStart(2,"0");
+  const dd = String(today.getDate()).padStart(2,"0");
+  const dateStr = `${yyyy}-${mm}-${dd}`;
+  const url = `${base}?format=json&fields=${encodeURIComponent(fields)}&filter=auction_date:gte:${dateStr}&sort=auction_date&page[size]=${max}`;
+
+  const json = await corsFetchJSON(url, {}, {ttlMs: 6*60*60*1000, cacheKey:"fiscal_upcoming_auctions"});
+  const data = json.data || [];
+  return data.map(x => ({
+    type: x.security_type,
+    term: x.security_term,
+    auction_date: x.auction_date,
+    issue_date: x.issue_date,
+    offering_amount: x.offering_amount
+  }));
+}
+
+async function buildMacroStrip(){
+  const strip = $("calendarStrip");
+  strip.innerHTML = "";
+
+  const macroBadge = $("macroBadge");
+  macroBadge.textContent = "Loading…";
+
+  const items = [];
+
+  const [cpi, jobs, auctions] = await Promise.allSettled([
+    fetchBLSEventNext("https://www.bls.gov/schedule/news_release/cpi.htm", "CPI"),
+    fetchBLSEventNext("https://www.bls.gov/schedule/news_release/empsit.htm", "Jobs (Employment Situation)"),
+    fetchUpcomingAuctions(4)
+  ]);
+
+  if (cpi.status === "fulfilled") items.push({kind:"macro", title:"CPI", ...cpi.value});
+  else items.push({kind:"macro", title:"CPI", dateStr:"—", timeStr:"—", note:"fetch failed"});
+
+  if (jobs.status === "fulfilled") items.push({kind:"macro", title:"Jobs", ...jobs.value});
+  else items.push({kind:"macro", title:"Jobs", dateStr:"—", timeStr:"—", note:"fetch failed"});
+
+  if (auctions.status === "fulfilled"){
+    for (const a of auctions.value){
+      items.push({
+        kind:"auction",
+        title:"Treasury auction",
+        dateStr: a.auction_date || "—",
+        timeStr: "—",
+        note: `${a.type || ""} ${a.term || ""}`.trim() || "—"
+      });
+    }
+  } else {
+    items.push({kind:"auction", title:"Treasury auction", dateStr:"—", timeStr:"—", note:"fetch failed"});
+  }
+
+  // Render
+  for (const it of items.slice(0,6)){
+    const div = document.createElement("div");
+    div.className = "calItem";
+    div.innerHTML = `
+      <b>${escapeHtml(it.title)}</b>
+      <div class="tiny"><span class="muted">Date:</span> <span class="mono">${escapeHtml(it.dateStr)}</span></div>
+      <div class="tiny"><span class="muted">Time:</span> <span class="mono">${escapeHtml(it.timeStr)}</span></div>
+      <div class="tiny"><span class="muted">Note:</span> ${escapeHtml(it.note)}</div>
+    `;
+    strip.appendChild(div);
+  }
+
+  // Compute “macro binary in 2 days” badge (simple: CPI or Jobs within 2 weekdays)
+  const today = new Date();
+  const parsedDates = [];
+  for (const it of items){
+    if (it.kind !== "macro") continue;
+    const d = new Date(it.dateStr + " 00:00:00");
+    if (!isNaN(d.getTime())) parsedDates.push(d);
+  }
+  parsedDates.sort((a,b)=>a-b);
+  const nextMacro = parsedDates.find(d => d.getTime() >= today.getTime() - 12*3600*1000);
+  if (nextMacro){
+    // weekday-based diff approx
+    const diffDays = Math.max(0, daysBetween(today, nextMacro));
+    if (diffDays <= 2){
+      macroBadge.textContent = "MACRO BINARY ≤ 2 DAYS → broad ETFs watchlist-only";
+      macroBadge.className = "badge warn";
+    } else {
+      macroBadge.textContent = `Next macro in ~${diffDays} days`;
+      macroBadge.className = "badge";
+    }
+  } else {
+    macroBadge.textContent = "Macro dates unknown";
+    macroBadge.className = "badge warn";
+  }
+
+  return {
+    nextMacroDate: nextMacro ? nextMacro.toISOString().slice(0,10) : null,
+    macroBinarySoon: !!(nextMacro && Math.max(0, daysBetween(today, nextMacro)) <= 2)
+  };
+}
+
+// ---------- Active trade state ----------
+function getActiveTrade(){
+  return loadJSON(LS_KEYS.activeTrade, null);
+}
+function setActiveTrade(tradeOrNull){
+  saveJSON(LS_KEYS.activeTrade, tradeOrNull);
+  renderActiveTrade();
+}
+
+function renderActiveTrade(){
+  const at = getActiveTrade();
+  const lock = $("tradeLock");
+  const panel = $("activeTradePanel");
+  const empty = $("noActiveTrade");
+  const statusBadge = $("statusBadge");
+
+  if (!at){
+    lock.style.display = "none";
+    panel.style.display = "none";
+    empty.style.display = "block";
+    statusBadge.textContent = "READY";
+    statusBadge.className = "badge";
+    return;
+  }
+
+  lock.style.display = "inline-flex";
+  panel.style.display = "block";
+  empty.style.display = "none";
+  statusBadge.textContent = "ACTIVE TRADE";
+  statusBadge.className = "badge bad";
+
+  $("at_symbol").textContent = at.ticker;
+  $("at_entry").textContent = `$${fmt(at.entry, 2)}`;
+  $("at_stop").textContent = `$${fmt(at.stop, 2)}`;
+  $("at_target").textContent = `$${fmt(at.targetLow, 2)} → $${fmt(at.targetHigh, 2)}`;
+
+  $("at_activation").textContent = at.activationExpires || "—";
+  $("at_timestop").textContent = at.timeStop || "—";
+  $("at_sessionsLeft").textContent = String(at.sessionsLeft ?? "—");
+  $("at_note").textContent = at.note || "—";
+}
+
+// ---------- Watchlist UI ----------
+function getWatchlist(){
+  return loadJSON(LS_KEYS.watchlist, []);
+}
+function setWatchlist(list){
+  saveJSON(LS_KEYS.watchlist, uniqUpper(list));
+  renderWatchlist();
+}
+function renderWatchlist(){
+  const chips = $("watchlistChips");
+  chips.innerHTML = "";
+  const list = getWatchlist();
+  if (!list.length){
+    chips.innerHTML = `<div class="muted tiny">No tickers. Add some (e.g., XLF MSFT SMH).</div>`;
+    return;
+  }
+  for (const t of list){
+    const span = document.createElement("span");
+    span.className = "chip";
+    span.innerHTML = `<span class="mono">${escapeHtml(t)}</span><button title="remove">×</button>`;
+    span.querySelector("button").onclick = () => {
+      setWatchlist(list.filter(x => x !== t));
+    };
+    chips.appendChild(span);
+  }
+}
+
+// ---------- Core run ----------
+function escapeHtml(s){
+  return String(s ?? "").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+function getMode(){
+  return Array.from(document.querySelectorAll('input[name="mode"]')).find(x=>x.checked)?.value || "EOD";
+}
+
+function setPullTime(){
+  $("pulledAt").textContent = nowISO();
+}
+
+function focusSelect(tickerStats, maxFocus=5){
+  // Stage 1: pick 3–5 "best-to-check" using tradability + basic movement (no news yet)
+  // Here: prefer higher dollar volume and known major ETFs/stocks.
+  const scored = tickerStats.map(s => {
+    const dollarVol = (s.avgVol20 && s.close) ? (s.avgVol20 * s.close) : 0;
+    const knownBoost = (KNOWN_ETFS.has(s.ticker) || ALIAS[s.ticker]) ? 1.2 : 1.0;
+    const sanityPenalty = (s.sanityProblems?.length ? 0.4 : 1.0);
+    const score = dollarVol * knownBoost * sanityPenalty;
+    return {...s, dollarVol, preScore: score};
+  });
+  scored.sort((a,b)=>b.preScore - a.preScore);
+  const focus = scored.slice(0, clamp(maxFocus, 3, 5)).map(x=>x.ticker);
+  return focus;
+}
+
+function computeSetupCandidate(s){
+  // Heuristic setups using daily candles
+  // Setup A: Pullback Bounce near Low(5d) and close green (close > open)
+  // Setup B: Tight range breakout in last 5-7 sessions and close near highs
+  const candles = s.candles || [];
+  if (candles.length < 8) return {setup:null, reason:"Not enough history"};
+
+  const last = candles[candles.length - 1];
+  const last7 = candles.slice(-7);
+  const hi7 = Math.max(...last7.map(c=>c.high));
+  const lo7 = Math.min(...last7.map(c=>c.low));
+  const rangePct = (hi7 - lo7) / last.close * 100;
+
+  // A: near support
+  const nearSupportPct = Math.abs((last.close - s.low5) / s.low5) * 100;
+  const closeGreen = last.close > last.open;
+
+  // B: tight range
+  const tightThreshold = (s.type === "ETF") ? 3.0 : 4.0;
+  const closeNearHigh = (hi7 - last.close) / last.close * 100 <= 0.4;
+
+  if (nearSupportPct <= 1.0 && closeGreen){
+    return {setup:"A", reason:"Pulled back near support and closed up."};
+  }
+  if (rangePct <= tightThreshold && closeNearHigh){
+    return {setup:"B", reason:"Tight range and closed near the range high."};
+  }
+  return {setup:null, reason:"No clean Setup A/B pattern today."};
+}
+
+function checklistScore(s, macroBinarySoon){
+  // 0–5 YES/NO checklist (simple heuristics, beginner-friendly)
+  let score = 0;
+  const flags = {timing:false, surprise:false, liquid:false, risk:false, room:false};
+
+  // 1) Timing: active news in last 72h
+  if ((s.gdeltVol72 ?? 0) >= 20) { score++; flags.timing = true; }
+
+  // 2) Surprise: keyword scan
+  if (s.headlineFlags?.surprise) { score++; flags.surprise = true; }
+
+  // 3) Liquid: dollar volume threshold (very rough)
+  const dv = s.dollarVol ?? 0;
+  const liquidThreshold = (s.type === "ETF") ? 20_000_000 : 50_000_000;
+  if (dv >= liquidThreshold) { score++; flags.liquid = true; }
+
+  // 4) Risk clear: stop exists (we always can define below support)
+  if (s.lowPrev && s.low5) { score++; flags.risk = true; }
+
+  // 5) Room: blocked by macro binary?
+  // Conservative: if macro binary is soon AND instrument is broad ETF → no.
+  // Stocks: unknown earnings => conservative. We do not fetch earnings dates here.
+  if (macroBinarySoon && BROAD_ETFS.has(s.ticker)){
+    flags.room = false;
+  } else {
+    // If stock, require GREEN and not too extended.
+    if (s.light === "GREEN") { score++; flags.room = true; }
+  }
+
+  return {score, flags};
+}
+
+function rankGreenOnly(stats){
+  const greens = stats.filter(s => s.light === "GREEN");
+  greens.sort((a,b)=>{
+    // higher checklist, higher gdelt vol, lower extension, higher liquidity
+    if ((b.check?.score ?? 0) !== (a.check?.score ?? 0)) return (b.check.score - a.check.score);
+    if ((b.gdeltVol72 ?? 0) !== (a.gdeltVol72 ?? 0)) return (b.gdeltVol72 - a.gdeltVol72);
+    if ((a.extensionPct ?? 999) !== (b.extensionPct ?? 999)) return (a.extensionPct - b.extensionPct);
+    return (b.dollarVol ?? 0) - (a.dollarVol ?? 0);
+  });
+  return greens;
+}
+
+function computeTradeCard(best){
+  // Build entry/stop/targets using simple rule.
+  // Setup A: entry near support (low5), stop below min(lowPrev, lowToday)
+  // Setup B: entry near range high, stop below range low
+  const posSize = Number($("posSize").value);
+
+  const candles = best.candles || [];
+  const last = candles[candles.length - 1];
+
+  const setupInfo = computeSetupCandidate(best);
+  const setup = setupInfo.setup;
+
+  let entry, stop;
+  let note = "";
+
+  if (setup === "A"){
+    const support = best.low5;
+    entry = support * 1.002; // small buffer above support
+    const pullbackLow = Math.min(last.low, best.lowPrev);
+    stop = pullbackLow * 0.998; // small buffer below
+    note = "Setup A: pullback bounce near support. Entry is near support. Stop is below the pullback low.";
+  } else if (setup === "B"){
+    const last7 = candles.slice(-7);
+    const hi7 = Math.max(...last7.map(c=>c.high));
+    const lo7 = Math.min(...last7.map(c=>c.low));
+    entry = hi7 * 1.001; // near breakout
+    stop = Math.min(lo7, best.lowPrev) * 0.998;
+    note = "Setup B: tight range breakout. Entry is near the range high. Stop is below the range low.";
+  } else {
+    return null;
+  }
+
+  // Targets
+  const targetPctLow = (best.type === "ETF") ? 0.08 : 0.15;
+  const targetPctHigh = (best.type === "ETF") ? 0.12 : 0.25;
+  const targetLow = entry * (1 + targetPctLow);
+  const targetHigh = entry * (1 + targetPctHigh);
+
+  // Time / activation windows
+  const today = new Date();
+  const activationExp = addTradingDays(today, 7).toISOString().slice(0,10);
+  const timeStop = addTradingDays(today, 20).toISOString().slice(0,10);
+
+  // Math (show mid target for net calc)
+  const midTarget = entry * (1 + ((targetPctLow + targetPctHigh)/2));
+  const m = grossNetMath(posSize, entry, stop, midTarget);
+
+  return {
+    ticker: best.ticker,
+    type: best.type,
+    entry, stop,
+    targetLow, targetHigh,
+    activationExp, timeStop,
+    posSize,
+    shares: m.shares,
+    grossProfit: m.grossProfit,
+    grossLoss: m.grossLoss,
+    netProfit: m.netProfit,
+    netLoss: m.netLoss,
+    note,
+    setup
+  };
+}
+
+// ---------- Rendering ----------
+function renderTable(stats){
+  const tb = $("dataTbody");
+  tb.innerHTML = "";
+  if (!stats.length){
+    tb.innerHTML = `<tr><td colspan="11" class="muted">No symbols.</td></tr>`;
+    return;
+  }
+  for (const s of stats){
+    const lightCls = s.lightCls || "badge";
+    const sanity = (s.sanityProblems?.length)
+      ? `<span class="badge bad">FAIL</span><div class="tiny muted">${escapeHtml(s.sanityProblems.join(", "))}</div>`
+      : `<span class="badge good">OK</span>`;
+
+    const liq = (s.dollarVol ?? 0) > 0
+      ? `<span class="mono">$${fmtInt(s.dollarVol)}</span><div class="tiny muted">~AvgVol20×Close</div>`
+      : `<span class="muted">—</span>`;
+
+    const heat = (s.gdeltVol72 ?? null) !== null
+      ? `<span class="mono">${fmtInt(s.gdeltVol72)}</span><div class="tiny muted">articles/72h</div>`
+      : `<span class="muted">—</span>`;
+
+    const heads = (s.headlines?.length)
+      ? s.headlines.map(h => `• <a href="${escapeHtml(h.url)}" target="_blank" rel="noreferrer noopener">${escapeHtml(h.title)}</a> <span class="muted">(${escapeHtml(h.domain || "")})</span>`).join("<br/>")
+      : `<span class="muted">—</span>`;
+
+    tb.insertAdjacentHTML("beforeend", `
+      <tr>
+        <td class="mono"><b>${escapeHtml(s.ticker)}</b></td>
+        <td>${escapeHtml(s.type)}</td>
+        <td class="mono">$${fmt(s.close,2)}</td>
+        <td class="mono">$${fmt(s.lowPrev,2)}</td>
+        <td class="mono">$${fmt(s.low5,2)}</td>
+        <td class="mono tiny">${escapeHtml(s.extMath || "—")}</td>
+        <td><span class="${lightCls}">${escapeHtml(s.light || "—")}</span></td>
+        <td>${sanity}</td>
+        <td>${liq}</td>
+        <td>${heat}</td>
+        <td class="tiny">${heads}</td>
+      </tr>
+    `);
+  }
+}
+
+function renderOutput({macro, focus, stats, greenRanked, decision, tradeCard, watchlistCard}){
+  const out = $("outputArea");
+  out.innerHTML = "";
+
+  const decisionBadge = decision === "TRADE"
+    ? `<span class="badge good">TRADE</span>`
+    : `<span class="badge bad">NO TRADE</span>`;
+
+  const why = (decision === "TRADE")
+    ? `We found ONE setup that is GREEN and meets the checklist.`
+    : `No symbol is clean enough today. We prefer NO TRADE.`;
+
+  out.insertAdjacentHTML("beforeend", `
+    <div class="decision">
+      <div class="big">${decision}</div>
+      ${decisionBadge}
+      <div class="muted">${escapeHtml(why)}</div>
+    </div>
+  `);
+
+  // GREEN ranked list
+  const greenHtml = greenRanked.length
+    ? greenRanked.slice(0,6).map(s => `
+        <div class="callout" style="margin-bottom:8px;">
+          <b class="mono">${escapeHtml(s.ticker)}</b>
+          <span class="${s.lightCls}" style="margin-left:8px;">${escapeHtml(s.light)}</span>
+          <div class="tiny muted" style="margin-top:6px;">
+            Why soon (weeks not years): ${escapeHtml(s.greenWhy || "News heat is high + price not extended.")}
+          </div>
+          <div class="tiny muted">
+            Checklist: <span class="mono">${s.check?.score ?? 0}/5</span> • Heat72h: <span class="mono">${fmtInt(s.gdeltVol72 ?? 0)}</span> • Ext%: <span class="mono">${fmt(s.extensionPct,2)}%</span>
+          </div>
+        </div>
+      `).join("")
+    : `<div class="callout"><b>No GREEN symbols.</b> <div class="tiny muted">Everything is AMBER/RED or failed sanity checks.</div></div>`;
+
+  out.insertAdjacentHTML("beforeend", `
+    <div class="sectionTitle" style="margin-top:8px;">
+      <div><h1 style="margin-bottom:2px;">Ranked GREEN list only</h1><div class="tiny muted">Only GREEN can be ranked or traded.</div></div>
+    </div>
+    ${greenHtml}
+  `);
+
+  if (decision === "TRADE" && tradeCard){
+    const tc = tradeCard;
+    const midTarget = (tc.targetLow + tc.targetHigh)/2;
+    const shares = tc.shares;
+    const grossProfit = tc.grossProfit;
+    const grossLoss = tc.grossLoss;
+
+    const mathBlock = `
+      <div class="callout mono tiny">
+        Shares = PositionSize / Entry = ${tc.posSize} / ${fmt(tc.entry,2)} = ${fmt(shares,4)}<br/>
+        MidTarget = (TargetLow + TargetHigh)/2 = (${fmt(tc.targetLow,2)} + ${fmt(tc.targetHigh,2)})/2 = ${fmt(midTarget,2)}<br/>
+        GrossProfit = Shares × (MidTarget − Entry) = ${fmt(shares,4)} × (${fmt(midTarget,2)} − ${fmt(tc.entry,2)}) = ${fmt(grossProfit,2)}<br/>
+        GrossLoss = Shares × (Entry − Stop) = ${fmt(shares,4)} × (${fmt(tc.entry,2)} − ${fmt(tc.stop,2)}) = ${fmt(grossLoss,2)}<br/>
+        NetProfit = (GrossProfit − 16) × 0.75 = (${fmt(grossProfit,2)} − 16) × 0.75 = ${fmt(tc.netProfit,2)}<br/>
+        NetLoss = GrossLoss + 16 = ${fmt(grossLoss,2)} + 16 = ${fmt(tc.netLoss,2)}
+      </div>
+    `;
+
+    out.insertAdjacentHTML("beforeend", `
+      <div class="sectionTitle" style="margin-top:10px;">
+        <div><h1 style="margin-bottom:2px;">ONE Trade Card</h1><div class="tiny muted">LIMIT only. No averaging down. No stop widening.</div></div>
+        <button class="btn small green" id="acceptTradeBtn">Accept trade (sets Active)</button>
+      </div>
+
+      <div class="tradeCard">
+        <div><b>Instrument:</b> <span class="mono">${escapeHtml(tc.ticker)}</span> <span class="muted">(${escapeHtml(tc.type)})</span></div>
+        <div class="tiny muted" style="margin-top:6px;"><b>Catalyst:</b> News heat in last 72h + price not extended. (Headlines shown in table.)</div>
+
+        <div class="line">
+          <div><b>Setup:</b> ${escapeHtml(tc.setup)} <span class="muted tiny">(${escapeHtml(tc.note)})</span></div>
+          <div><b>Activation window:</b> until <span class="mono">${escapeHtml(tc.activationExp)}</span></div>
+          <div><b>Time-stop:</b> <span class="mono">${escapeHtml(tc.timeStop)}</span> (20 sessions)</div>
+        </div>
+
+        <div class="line">
+          <div><b>Entry plan (LIMIT):</b> <span class="mono">$${fmt(tc.entry,2)}</span></div>
+          <div><b>Stop / invalidation:</b> <span class="mono">$${fmt(tc.stop,2)}</span></div>
+          <div><b>Target zone:</b> <span class="mono">$${fmt(tc.targetLow,2)} → $${fmt(tc.targetHigh,2)}</span></div>
+        </div>
+
+        <div class="hr"></div>
+
+        <div><b>Net outcomes after fees & tax</b> <span class="muted tiny">(Position size <span class="mono">$${fmtInt(tc.posSize)}</span>)</span></div>
+        <div class="line">
+          <div>• Target hit (mid-zone): <span class="mono">$${fmt(tc.netProfit,2)}</span> net</div>
+          <div>• Stop hit: <span class="mono">$${fmt(tc.netLoss,2)}</span> net loss</div>
+        </div>
+
+        <div class="hr"></div>
+        <div><b>Math (exact numbers)</b></div>
+        ${mathBlock}
+
+        <div class="hr"></div>
+        <div class="tiny muted"><b>Final principle:</b> Price validity overrides catalyst quality. Prefer NO TRADE to weak setups.</div>
+      </div>
+    `);
+
+    // Accept trade button
+    setTimeout(()=>{
+      const btn = document.getElementById("acceptTradeBtn");
+      if (btn){
+        btn.onclick = () => {
+          // store active trade
+          const at = {
+            ticker: tc.ticker,
+            entry: tc.entry,
+            stop: tc.stop,
+            targetLow: tc.targetLow,
+            targetHigh: tc.targetHigh,
+            activationExpires: tc.activationExp,
+            timeStop: tc.timeStop,
+            sessionsLeft: 20,
+            note: `Accepted from Trade Card. Setup ${tc.setup}.`
+          };
+          setActiveTrade(at);
+          alert("Active trade set. New trades are now locked.");
+        };
+      }
+    }, 0);
+
+  } else {
+    // NO TRADE watchlist triggers
+    out.insertAdjacentHTML("beforeend", `
+      <div class="sectionTitle" style="margin-top:10px;">
+        <div><h1 style="margin-bottom:2px;">Watchlist Card</h1><div class="tiny muted">Exact upgrade triggers + headline that flips ON.</div></div>
+      </div>
+      <div class="tradeCard">
+        <div><b>Symbols:</b> <span class="mono">${escapeHtml(focus.join(", ")) || "—"}</span></div>
+        <div class="tiny muted" style="margin-top:6px;"><b>Why on watch:</b> Either too extended (AMBER/RED), blocked by binary, or no clean Setup A/B.</div>
+
+        <div class="hr"></div>
+        <div><b>Exact upgrade triggers (flip GREEN)</b></div>
+        <div class="tiny muted" style="margin-top:6px;">
+          For each symbol: GREEN requires Extension% under its threshold.
+          That means: Close ≤ Low(5d) × (1 + threshold).
+        </div>
+
+        <div class="callout mono tiny" style="margin-top:10px;">
+          ${watchlistCard || "—"}
+        </div>
+
+        <div class="hr"></div>
+        <div><b>Headline that flips ON</b></div>
+        <div class="tiny muted" style="margin-top:6px;">
+          A <b>specific</b> catalyst headline that changes odds: e.g. “Fed signal changes”, “CPI surprise”, “major regulatory approval”, “big contract award”, “sanctions/tariffs deadline moved”.
+        </div>
+
+        <div class="hr"></div>
+        <div><b>Tomorrow plan</b></div>
+        <div class="tiny muted" style="margin-top:6px;">
+          Re-run after US close. If any symbol turns GREEN and shows Setup A/B, we can build ONE Trade Card.
+        </div>
+
+        <div class="hr"></div>
+        <div class="tiny muted"><b>Final principle:</b> Price validity overrides catalyst quality. Prefer NO TRADE to weak setups.</div>
+      </div>
+    `);
+  }
+}
+
+function buildWatchlistTriggersText(focusStats){
+  // Show exact close level that would flip GREEN for each focus symbol
+  // GREEN condition:
+  // ETFs: ext <= 3% => Close <= Low5 * 1.03
+  // Stocks: ext <= 4% => Close <= Low5 * 1.04
+  const lines = [];
+  for (const s of focusStats){
+    if (!s.low5 || !s.close) continue;
+    const thr = (s.type === "ETF") ? 0.03 : 0.04;
+    const maxCloseGreen = s.low5 * (1 + thr);
+    const need = (s.close <= maxCloseGreen) ? "Already GREEN by extension" : `Needs Close ≤ ${fmt(maxCloseGreen,2)}`;
+    lines.push(`${s.ticker}: Low(5d)=${fmt(s.low5,2)} • Threshold=${(thr*100).toFixed(1)}% • MaxCloseGreen=${fmt(maxCloseGreen,2)} → ${need}`);
+  }
+  return lines.join("\n");
+}
+
+async function runAgent(){
+  // If active trade exists, lock new ideas and show only management note.
+  const active = getActiveTrade();
+  if (active){
+    alert("Active trade is present. New trades are locked. Use the Active Trade panel.");
+    return;
+  }
+
+  setPullTime();
+
+  const maxTracked = clamp(Number($("maxTracked").value || 20), 3, 50);
+  const watchlist = getWatchlist().slice(0, maxTracked);
+
+  if (!watchlist.length){
+    $("outputArea").innerHTML = `
+      <div class="decision">
+        <div class="big">NO TRADE</div>
+        <span class="badge bad">NO DATA</span>
+        <div class="muted">Add tickers to your watchlist first.</div>
+      </div>`;
+    return;
+  }
+
+  // Load macro strip first (guardrails)
+  let macro = {macroBinarySoon:false, nextMacroDate:null};
+  try {
+    macro = await buildMacroStrip();
+  } catch (e){
+    $("macroBadge").textContent = "Macro fetch failed";
+    $("macroBadge").className = "badge warn";
+  }
+
+  // Fetch price data for all watchlist (auto-data section)
+  const mode = getMode();
+  const stats = [];
+
+  // Concurrency limit
+  const queue = [...watchlist];
+  const workers = Array.from({length: 4}, () => (async ()=>{
+    while (queue.length){
+      const ticker = queue.shift();
+      try{
+        const candles = await fetchDailyCandlesStooq(ticker);
+        if (!candles.length){
+          stats.push({ticker, type: classifyType(ticker), close:null, lowPrev:null, low5:null, extensionPct:null, light:"—", lightCls:"badge", sanityProblems:["no candles"], headlines:[]});
+          continue;
+        }
+
+        // EOD: last close from latest session
+        let close = candles[candles.length-1].close;
+
+        // Intraday: try pull latest quote close; if fails use last daily close
+        if (mode === "INTRADAY"){
+          try{
+            const q = await fetchLastQuoteStooq(ticker);
+            if (q && isFinite(q.close) && q.close > 0){
+              close = q.close;
+            }
+          } catch {}
+        }
+
+        const lowPrev = (candles.length >= 2) ? candles[candles.length-2].low : null;
+
+        // Low(5d): min of last 5 completed sessions (if intraday, still use last 5 daily rows)
+        const last5 = candles.slice(-5);
+        const low5 = last5.length ? Math.min(...last5.map(c=>c.low)) : null;
+
+        // Avg volume 20 sessions
+        const last20 = candles.slice(-20);
+        const avgVol20 = last20.length ? (last20.reduce((a,c)=>a + (c.volume||0), 0) / last20.length) : null;
+
+        const extensionPct = (close && low5) ? ((close - low5)/low5*100) : null;
+        const t = classifyType(ticker);
+        const tl = trafficLight(t, extensionPct);
+
+        const extMath = (close && low5)
+          ? `(${fmt(close,2)} − ${fmt(low5,2)}) / ${fmt(low5,2)} × 100 = ${fmt(extensionPct,2)}%`
+          : "—";
+
+        const sanityProblems = priceSanity(close, lowPrev, low5);
+
+        stats.push({
+          ticker,
+          type: t,
+          close, lowPrev, low5,
+          avgVol20,
+          candles,
+          extensionPct,
+          light: tl.light,
+          lightCls: tl.cls,
+          extMath,
+          sanityProblems
+        });
+
+      }catch(e){
+        stats.push({ticker, type: classifyType(ticker), close:null, lowPrev:null, low5:null, extensionPct:null, light:"—", lightCls:"badge warn", sanityProblems:["fetch failed"], headlines:[]});
+      }
+    }
+  })());
+  await Promise.all(workers);
+
+  // Sort stats back to watchlist order
+  stats.sort((a,b)=>watchlist.indexOf(a.ticker) - watchlist.indexOf(b.ticker));
+
+  // Stage 1 focus select (3–5)
+  const focus = focusSelect(stats, 5);
+  $("focusList").textContent = focus.join(", ") || "—";
+
+  // Fetch GDELT only for focus symbols (anti-friction + rate limiting)
+  const focusSet = new Set(focus);
+  const focusQueue = stats.filter(s=>focusSet.has(s.ticker));
+  const gdWorkers = Array.from({length: 3}, () => (async ()=>{
+    while (focusQueue.length){
+      const s = focusQueue.shift();
+      try{
+        const q = buildGdeltQuery(s.ticker);
+        const [tv, al] = await Promise.all([
+          gdeltTimelineVolRaw(q, 72),
+          gdeltTopArticles(q, 6, 72)
+        ]);
+        s.gdeltVol72 = tv.total;
+        s.headlines = al;
+        s.headlineFlags = catalystHeuristics(al);
+      } catch (e){
+        s.gdeltVol72 = null;
+        s.headlines = [];
+        s.headlineFlags = {surprise:false};
+      }
+    }
+  })());
+  await Promise.all(gdWorkers);
+
+  // Compute liquidity + checklist + why
+  for (const s of stats){
+    const dv = (s.avgVol20 && s.close) ? (s.avgVol20 * s.close) : 0;
+    s.dollarVol = dv;
+
+    // Guardrail: macro binary soon → broad ETFs watchlist-only
+    if (macro.macroBinarySoon && BROAD_ETFS.has(s.ticker)){
+      s.restricted = true;
+    }
+
+    // Checklist only meaningful when we have news heat
+    s.check = checklistScore(s, macro.macroBinarySoon);
+
+    // Simple “why soon”
+    const heat = s.gdeltVol72 ?? 0;
+    if (s.light === "GREEN" && heat >= 20){
+      s.greenWhy = "News attention is high now. Price is not extended.";
+    } else if (s.light === "GREEN"){
+      s.greenWhy = "Price is not extended. Needs a clearer catalyst.";
+    } else if (s.light === "AMBER"){
+      s.greenWhy = "Slightly extended. Better entry needed.";
+    } else if (s.light === "RED"){
+      s.greenWhy = "Too extended. Do not chase.";
+    } else {
+      s.greenWhy = "Data not valid.";
+    }
+
+    // Restriction overrides trading
+    if (s.restricted){
+      s.light = "RESTRICTED";
+      s.lightCls = "badge warn";
+    }
+  }
+
+  // Render table now
+  renderTable(stats);
+
+  // Rank GREEN-only (and not restricted)
+  const eligible = stats.filter(s => s.light === "GREEN" && !(s.sanityProblems?.length));
+  for (const s of eligible){
+    // Require Setup A/B exists
+    const setup = computeSetupCandidate(s);
+    s.setupCandidate = setup;
+  }
+
+  // Apply the core rule: trade allowed only if GREEN + checklist ≥ 4 + has Setup A/B
+  const candidates = eligible
+    .filter(s => (s.check?.score ?? 0) >= 4)
+    .filter(s => s.setupCandidate?.setup);
+
+  // Rank candidates
+  candidates.sort((a,b)=>{
+    if ((b.check.score) !== (a.check.score)) return b.check.score - a.check.score;
+    if ((b.gdeltVol72 ?? 0) !== (a.gdeltVol72 ?? 0)) return (b.gdeltVol72 ?? 0) - (a.gdeltVol72 ?? 0);
+    if ((a.extensionPct ?? 999) !== (b.extensionPct ?? 999)) return (a.extensionPct ?? 999) - (b.extensionPct ?? 999);
+    return (b.dollarVol ?? 0) - (a.dollarVol ?? 0);
+  });
+
+  const greenRanked = rankGreenOnly(stats.filter(s => s.light !== "RESTRICTED"));
+
+  let decision = "NO TRADE";
+  let tradeCard = null;
+
+  if (candidates.length){
+    // ONE best candidate
+    const best = candidates[0];
+    tradeCard = computeTradeCard(best);
+    if (tradeCard) decision = "TRADE";
+  }
+
+  // Watchlist triggers for focus
+  const focusStats = stats.filter(s => focusSet.has(s.ticker));
+  const watchlistCard = buildWatchlistTriggersText(focusStats);
+
+  renderOutput({macro, focus, stats, greenRanked, decision, tradeCard, watchlistCard});
+}
+
+// ---------- Buttons ----------
+$("addTickerBtn").onclick = () => {
+  const t = $("tickerInput").value;
+  const add = parseTickersFromText(t);
+  if (!add.length) return;
+  const wl = getWatchlist();
+  setWatchlist([...wl, ...add]);
+  $("tickerInput").value = "";
+};
+
+$("clearBtn").onclick = () => {
+  if (confirm("Clear watchlist?")) setWatchlist([]);
+};
+
+$("seedBtn").onclick = () => {
+  const wl = getWatchlist();
+  setWatchlist([...wl, ...COMMON_SEED]);
+};
+
+$("runBtn").onclick = runAgent;
+
+// Position size UI
+$("posSize").oninput = () => {
+  $("posSizeVal").textContent = String($("posSize").value);
+};
+$("posSizeVal").textContent = String($("posSize").value);
+
+// Active trade management buttons
+$("btnCloseTrade").onclick = () => {
+  if (!getActiveTrade()) return;
+  if (confirm("Close trade now? (This will unlock new trades.)")){
+    setActiveTrade(null);
+    alert("Trade closed. New trades unlocked.");
+  }
+};
+$("btnStopHit").onclick = () => {
+  if (!getActiveTrade()) return;
+  if (confirm("Mark STOP HIT and close trade?")){
+    setActiveTrade(null);
+    alert("Stop hit recorded. New trades unlocked.");
+  }
+};
+$("btnTargetHit").onclick = () => {
+  if (!getActiveTrade()) return;
+  if (confirm("Mark TARGET HIT and close trade?")){
+    setActiveTrade(null);
+    alert("Target hit recorded. New trades unlocked.");
+  }
+};
+
+// Init
+(function init(){
+  setPullTime();
+  renderWatchlist();
+  renderActiveTrade();
+  // Pre-load macro strip (best effort)
+  buildMacroStrip().catch(()=>{});
+})();
+</script>
+</body>
+</html>
