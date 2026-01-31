@@ -1,0 +1,1531 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Speculative Trading Smart Agent — Simple</title>
+  <style>
+    :root{
+      --bg:#0b1020;
+      --panel:#0f1830;
+      --panel2:#101b35;
+      --line:rgba(255,255,255,0.08);
+      --text:#eaf1ff;
+      --muted:#a9b8df;
+      --good:#2ee58f;
+      --warn:#ffbb3c;
+      --bad:#ff5b6e;
+      --btn:#1e2b55;
+      --btn2:#26356b;
+      --chip:#17244a;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Liberation Sans", sans-serif;
+      --radius:16px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:var(--sans);
+      color:var(--text);
+      background:
+        radial-gradient(1200px 600px at 20% -20%, rgba(46,229,143,0.12), transparent 55%),
+        radial-gradient(900px 500px at 110% 10%, rgba(255,187,60,0.10), transparent 60%),
+        radial-gradient(900px 500px at 20% 120%, rgba(255,91,110,0.10), transparent 60%),
+        linear-gradient(180deg, #070a14 0%, var(--bg) 55%, #070a14 100%);
+    }
+    a{color:#9ec1ff}
+    .wrap{max-width:1100px; margin:0 auto; padding:16px}
+    .card{
+      background:rgba(15,24,48,0.88);
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow: 0 16px 50px rgba(0,0,0,0.35);
+      padding:14px;
+    }
+    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+    .col{display:flex; flex-direction:column; gap:8px}
+    .spacer{flex:1}
+    h1{margin:0; font-size:18px; letter-spacing:0.2px}
+    h2{margin:0; font-size:13px; color:var(--muted); font-weight:750}
+    .muted{color:var(--muted)}
+    .mono{font-family:var(--mono)}
+    .tiny{font-size:12px}
+    .hr{height:1px; background:var(--line); margin:12px 0}
+    .pill{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:8px 10px;
+      border-radius:999px;
+      border:1px solid var(--line);
+      background:rgba(16,27,53,0.65);
+      font-size:12px;
+      color:var(--muted);
+    }
+    .badge{
+      display:inline-flex; align-items:center; justify-content:center;
+      padding:6px 10px;
+      height:26px;
+      border-radius:999px;
+      border:1px solid var(--line);
+      background:rgba(16,27,53,0.65);
+      font-size:12px;
+      font-weight:850;
+      letter-spacing:0.2px;
+      color:var(--text);
+    }
+    .good{border-color:rgba(46,229,143,0.35); color:var(--good)}
+    .warn{border-color:rgba(255,187,60,0.35); color:var(--warn)}
+    .bad{border-color:rgba(255,91,110,0.35); color:var(--bad)}
+    .btn{
+      cursor:pointer;
+      border:1px solid var(--line);
+      background:linear-gradient(180deg, var(--btn) 0%, #141f42 100%);
+      color:var(--text);
+      border-radius:12px;
+      padding:11px 14px;
+      font-weight:800;
+      transition:transform 0.05s ease, background 0.2s ease;
+      user-select:none;
+    }
+    .btn:hover{background:linear-gradient(180deg, var(--btn2) 0%, #141f42 100%)}
+    .btn:active{transform:translateY(1px)}
+    .btn.small{padding:8px 11px; border-radius:12px; font-size:12px}
+    .btn.green{border-color:rgba(46,229,143,0.5)}
+    .btn.red{border-color:rgba(255,91,110,0.5)}
+    .btn.gray{opacity:0.8}
+    input[type="text"], input[type="number"], textarea{
+      width:100%;
+      padding:11px 12px;
+      border-radius:12px;
+      border:1px solid var(--line);
+      background:rgba(10,15,30,0.6);
+      color:var(--text);
+      outline:none;
+      font-size:14px;
+    }
+    textarea{font-family:var(--mono); font-size:12.5px}
+    input[type="range"]{width:220px}
+    .grid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:12px;
+      margin-top:12px;
+    }
+    @media(max-width:980px){ .grid{grid-template-columns:1fr} }
+
+    /* Step header */
+    .howto{
+      display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start;
+      padding:12px;
+      border-radius:var(--radius);
+      border:1px solid var(--line);
+      background:rgba(16,27,53,0.55);
+      margin-top:12px;
+    }
+    .howto .step{
+      flex:1; min-width:220px;
+      padding:10px 12px;
+      border-radius:14px;
+      border:1px solid var(--line);
+      background:rgba(15,24,48,0.55);
+    }
+    .howto .step b{display:block; margin-bottom:4px}
+    .chips{display:flex; gap:8px; flex-wrap:wrap; margin-top:10px}
+    .chip{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:7px 10px;
+      border-radius:999px;
+      border:1px solid var(--line);
+      background:rgba(23,36,74,0.85);
+      font-size:12px;
+    }
+    .chip button{
+      cursor:pointer;
+      border:none;
+      background:transparent;
+      color:var(--muted);
+      font-weight:900;
+      font-size:14px;
+      line-height:1;
+    }
+
+    /* Hero decision */
+    .hero{
+      padding:14px;
+      border-radius:var(--radius);
+      border:1px solid var(--line);
+      background:rgba(16,27,53,0.55);
+    }
+    .heroTop{
+      display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    }
+    .heroTitle{font-size:20px; font-weight:950; letter-spacing:0.3px}
+    .heroText{margin-top:8px; color:var(--muted); font-size:13px; line-height:1.35}
+    .heroCta{margin-top:12px; display:flex; gap:10px; flex-wrap:wrap; align-items:center}
+
+    details{
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      background:rgba(16,27,53,0.35);
+      padding:10px 12px;
+    }
+    summary{
+      cursor:pointer;
+      font-weight:850;
+      color:var(--text);
+      user-select:none;
+    }
+    summary .muted{font-weight:650}
+    .detailBody{margin-top:10px}
+
+    table{
+      width:100%;
+      border-collapse:separate;
+      border-spacing:0;
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      overflow:hidden;
+      background:rgba(10,15,30,0.35);
+    }
+    th, td{
+      padding:10px;
+      border-bottom:1px solid var(--line);
+      font-size:12px;
+      vertical-align:top;
+    }
+    th{
+      text-align:left;
+      color:var(--muted);
+      font-weight:850;
+      background:rgba(15,24,48,0.7);
+      position:sticky;
+      top:0;
+    }
+    tr:last-child td{border-bottom:none}
+
+    .warnBox{
+      border:1px solid rgba(255,187,60,0.28);
+      background:rgba(255,187,60,0.08);
+      border-radius:14px;
+      padding:10px 12px;
+      color:var(--warn);
+      font-size:12px;
+      font-weight:750;
+    }
+    .okBox{
+      border:1px solid rgba(46,229,143,0.28);
+      background:rgba(46,229,143,0.07);
+      border-radius:14px;
+      padding:10px 12px;
+      color:var(--good);
+      font-size:12px;
+      font-weight:750;
+    }
+    .dangerBox{
+      border:1px solid rgba(255,91,110,0.28);
+      background:rgba(255,91,110,0.07);
+      border-radius:14px;
+      padding:10px 12px;
+      color:var(--bad);
+      font-size:12px;
+      font-weight:750;
+    }
+    .tradeCard{
+      margin-top:10px;
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      background:rgba(15,24,48,0.75);
+      padding:12px;
+    }
+    .tradeCard .kv{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:10px;
+      margin-top:10px;
+    }
+    @media(max-width:700px){ .tradeCard .kv{grid-template-columns:1fr} }
+    .kv .box{
+      border:1px solid var(--line);
+      border-radius:14px;
+      background:rgba(10,15,30,0.35);
+      padding:10px 12px;
+    }
+    .kv .box b{display:block; margin-bottom:4px}
+    .footerNote{margin-top:12px; color:var(--muted); font-size:12px; line-height:1.4}
+  </style>
+</head>
+
+<body>
+<div class="wrap">
+
+  <!-- Header -->
+  <div class="card">
+    <div class="row">
+      <div class="col" style="min-width:260px;">
+        <h1>Speculative Trading Smart Agent</h1>
+        <div class="tiny muted">Decision-first UI. One trade at a time. Default = NO TRADE unless rules pass.</div>
+      </div>
+
+      <div class="spacer"></div>
+
+      <span class="pill">
+        <span class="muted">Mode</span>
+        <label class="row tiny" style="gap:6px; margin-left:6px;">
+          <input type="radio" name="mode" value="EOD" checked> EOD
+        </label>
+        <label class="row tiny" style="gap:6px;">
+          <input type="radio" name="mode" value="INTRADAY"> Intraday
+        </label>
+      </span>
+
+      <span class="pill">
+        <span class="muted">Active trade</span>
+        <span id="activeTradePill" class="mono">none</span>
+      </span>
+
+      <span class="pill">
+        <span class="muted">Updated</span>
+        <span id="updatedAt" class="mono">—</span>
+      </span>
+
+      <button class="btn" id="runBtn">RUN — pick ONE trade</button>
+    </div>
+
+    <div class="howto" style="margin-top:12px;">
+      <div class="step">
+        <b>1) Add tickers</b>
+        <div class="tiny muted">Type tickers and press <span class="mono">Add</span>. Example: XLF MSFT SMH XLE TLT.</div>
+      </div>
+      <div class="step">
+        <b>2) Click RUN</b>
+        <div class="tiny muted">The app focuses on only 3–5 tickers and fetches prices automatically (Stooq) + headlines (GDELT).</div>
+      </div>
+      <div class="step">
+        <b>3) Follow the result</b>
+        <div class="tiny muted">If TRADE → you get ONE Trade Card. If NO TRADE → you get exact watchlist triggers.</div>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:12px;">
+      <span class="pill"><span class="muted">Free sources</span> Stooq (prices) • GDELT (headlines) • BLS/FiscalData (macro)</span>
+      <span class="pill"><span class="muted">Orders</span> LIMIT only</span>
+      <span class="pill"><span class="muted">Rule</span> One active trade only</span>
+      <span class="spacer"></span>
+      <span id="macroBanner" class="badge">Macro: loading…</span>
+    </div>
+  </div>
+
+  <div class="grid">
+
+    <!-- Watchlist -->
+    <div class="card">
+      <div class="row">
+        <div class="col" style="flex:1; min-width:260px;">
+          <h1>Watchlist</h1>
+          <div class="tiny muted">Your only manual work: add tickers. The agent will focus on 3–5 per run.</div>
+        </div>
+        <span class="pill"><span class="muted">Max tracked</span>
+          <input id="maxTracked" type="number" min="3" max="50" step="1" value="20" style="width:86px; margin-left:8px;">
+        </span>
+      </div>
+
+      <div class="row" style="margin-top:10px;">
+        <input id="tickerInput" type="text" placeholder="Add tickers: XLF MSFT AAPL SMH ..." />
+        <button class="btn" id="addBtn">Add</button>
+      </div>
+
+      <div class="row" style="margin-top:10px;">
+        <button class="btn small gray" id="seedBtn">Seed common</button>
+        <button class="btn small gray" id="clearBtn">Clear</button>
+        <span class="spacer"></span>
+        <label class="pill tiny" title="Default ON: only ETFs can be traded. Stocks stay watchlist-only unless you enable this.">
+          <input type="checkbox" id="includeStocks">
+          Include stocks as trade candidates
+        </label>
+      </div>
+
+      <div class="chips" id="chips"></div>
+
+      <div class="hr"></div>
+
+      <!-- Manual prices (optional) -->
+      <details id="manualPanel">
+        <summary>Manual prices (optional) <span class="muted tiny">— use if auto data is blocked/wrong</span></summary>
+        <div class="detailBody">
+          <div class="tiny muted">After you click RUN, we’ll generate a template for the 3–5 focus tickers. Paste only: Close | Low(prev) | Low(5d).</div>
+
+          <div class="row" style="margin-top:10px;">
+            <label class="pill tiny">
+              <input type="checkbox" id="useManual">
+              Use manual prices (override auto for focus tickers)
+            </label>
+            <button class="btn small" id="applyManualBtn">Apply manual prices</button>
+          </div>
+
+          <textarea id="manualText" rows="7" placeholder="Ticker | Close | Low(prev) | Low(5d)
+XLF | 53.55 | 52.76 | 52.76
+MSFT | 433.50 | 421.02 | 421.02"></textarea>
+
+          <div class="footerNote">
+            Tip: if you don’t want to type daily, keep auto mode. Use manual only when data looks off.
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <!-- Results -->
+    <div class="card">
+      <div class="row">
+        <div class="col" style="flex:1; min-width:260px;">
+          <h1>Result</h1>
+          <div class="tiny muted">Decision-first. Plain language. Exact math shown on a Trade Card.</div>
+        </div>
+
+        <label class="pill tiny" title="Simple shows only what you need. Pro reveals data tables.">
+          <input type="checkbox" id="proToggle">
+          Pro details
+        </label>
+      </div>
+
+      <div class="hero" style="margin-top:10px;">
+        <div class="heroTop">
+          <div class="heroTitle" id="decisionTitle">Ready</div>
+          <span id="decisionBadge" class="badge">—</span>
+          <span class="spacer"></span>
+          <span class="pill"><span class="muted">Focus</span> <span id="focusPill" class="mono">—</span></span>
+        </div>
+
+        <div class="heroText" id="decisionText">
+          Add tickers on the left, then click <span class="mono">RUN</span>.
+        </div>
+
+        <div class="heroCta" id="heroCta"></div>
+
+        <div id="tradeCardHost"></div>
+      </div>
+
+      <div id="proArea" style="display:none; margin-top:12px;">
+        <details open>
+          <summary>Why the decision was made <span class="muted tiny">— quick rules recap</span></summary>
+          <div class="detailBody tiny muted">
+            <div>• Only <b>GREEN</b> symbols can be ranked/traded (extension filter).</div>
+            <div>• Default is <b>NO TRADE</b> unless rules pass.</div>
+            <div>• One trade only. If active → new trades locked.</div>
+            <div>• If macro calendar cannot be fetched → we become more conservative (bias to NO TRADE).</div>
+          </div>
+        </details>
+
+        <div class="hr"></div>
+
+        <details>
+          <summary>Focus table (3–5 tickers)</summary>
+          <div class="detailBody" style="overflow:auto; max-height:340px;">
+            <table>
+              <thead>
+                <tr>
+                  <th style="min-width:90px;">Ticker</th>
+                  <th>Type</th>
+                  <th class="mono">Close</th>
+                  <th class="mono">Low(prev)</th>
+                  <th class="mono">Low(5d)</th>
+                  <th class="mono">Ext%</th>
+                  <th>Light</th>
+                  <th>News (72h)</th>
+                  <th style="min-width:260px;">Top headline (GDELT)</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody id="focusTbody">
+                <tr><td colspan="10" class="muted">Run the scan to see focus data.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </div>
+
+      <div class="footerNote">
+        Final principle: <b>Price validity overrides catalyst quality.</b> Prefer <b>NO TRADE</b> to weak setups.
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Active trade manager (only visible when active) -->
+  <div class="card" id="activeTradeCard" style="margin-top:12px; display:none;">
+    <div class="row">
+      <div class="col" style="flex:1; min-width:260px;">
+        <h1>Active trade</h1>
+        <div class="tiny muted">New trades are locked until this trade is closed.</div>
+      </div>
+      <span id="lockBadge" class="badge bad">NEW TRADES LOCKED</span>
+      <span class="spacer"></span>
+      <button class="btn small gray" id="closeTradeBtn">Close trade</button>
+      <button class="btn small red" id="stopHitBtn">Stop hit</button>
+      <button class="btn small green" id="targetHitBtn">Target hit</button>
+    </div>
+
+    <div class="hr"></div>
+
+    <div class="row">
+      <span class="pill"><span class="muted">Instrument</span> <span id="at_ticker" class="mono">—</span></span>
+      <span class="pill"><span class="muted">Entry</span> <span id="at_entry" class="mono">—</span></span>
+      <span class="pill"><span class="muted">Stop</span> <span id="at_stop" class="mono">—</span></span>
+      <span class="pill"><span class="muted">Target zone</span> <span id="at_target" class="mono">—</span></span>
+      <span class="pill"><span class="muted">Time-stop</span> <span id="at_timeStop" class="mono">—</span></span>
+      <span class="pill"><span class="muted">Sessions left</span> <span id="at_sessions" class="mono">—</span></span>
+    </div>
+
+    <div class="footerNote" id="at_note">—</div>
+  </div>
+
+</div>
+
+<script>
+/* ===========================
+   Speculative Trading Agent — SIMPLE UI
+   - Watchlist (manual)
+   - RUN (auto fetch prices via Stooq; headlines via GDELT)
+   - Manual override panel (Stage 2)
+   - Decision-first output (TRADE / NO TRADE)
+   - One active trade at a time (localStorage)
+   =========================== */
+
+const LS = {
+  watchlist: "sta2_watchlist",
+  active: "sta2_active_trade",
+};
+
+const COMMON_SEED = ["SPY","QQQ","IWM","TLT","XLF","XLE","SMH","GLD","USO","XLI","AAPL","MSFT","NVDA","AMZN","GOOGL","META","TSLA","JPM","XOM","LMT","ITA","XOP"];
+
+const KNOWN_ETFS = new Set(["SPY","QQQ","IWM","DIA","VTI","XLF","XLE","XLI","XLY","XLP","XLV","XLK","XLU","XLB","SMH","SOXX","TLT","IEF","HYG","LQD","GLD","SLV","USO","UNG","EEM","EWJ","FXI","ARKK","ITA","XOP","KRE"]);
+const BROAD_ETFS = new Set(["SPY","QQQ","IWM","DIA","VTI"]);
+
+const ALIAS = {
+  "AAPL":"Apple",
+  "MSFT":"Microsoft",
+  "NVDA":"Nvidia",
+  "AMZN":"Amazon",
+  "GOOGL":"Alphabet",
+  "META":"Meta",
+  "TSLA":"Tesla",
+  "JPM":"JPMorgan",
+  "XOM":"Exxon",
+  "LMT":"Lockheed",
+  "SMH":"semiconductor ETF",
+  "XLF":"financial ETF",
+  "XLE":"energy ETF",
+  "TLT":"long term treasuries ETF",
+  "ITA":"aerospace defense ETF",
+};
+
+const $ = (id)=>document.getElementById(id);
+
+function nowStr(){
+  return new Date().toLocaleString(undefined, {
+    year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit"
+  });
+}
+function fmt(n, d=2){
+  if (n === null || n === undefined || Number.isNaN(n)) return "—";
+  return Number(n).toFixed(d);
+}
+function fmtInt(n){
+  if (n === null || n === undefined || Number.isNaN(n)) return "—";
+  return Math.round(Number(n)).toLocaleString();
+}
+function escapeHtml(s){
+  return String(s ?? "").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+function uniqUpper(arr){
+  const seen = new Set();
+  const out = [];
+  for (const x of arr){
+    const t = String(x||"").trim().toUpperCase();
+    if (!t) continue;
+    if (!seen.has(t)){
+      seen.add(t); out.push(t);
+    }
+  }
+  return out;
+}
+function parseTickers(text){
+  return uniqUpper(String(text||"").split(/[\s,;]+/g).filter(Boolean));
+}
+function loadJSON(key, fallback){
+  try{
+    const s = localStorage.getItem(key);
+    return s ? JSON.parse(s) : fallback;
+  }catch{ return fallback; }
+}
+function saveJSON(key, value){
+  localStorage.setItem(key, JSON.stringify(value));
+}
+function getMode(){
+  return Array.from(document.querySelectorAll('input[name="mode"]')).find(x=>x.checked)?.value || "EOD";
+}
+function classifyType(t){
+  return KNOWN_ETFS.has(t) ? "ETF" : "STOCK";
+}
+function toStooqSymbol(tickerUpper){
+  const t = tickerUpper.trim();
+  if (!t) return "";
+  if (t.includes(".")) return t.toLowerCase();
+  return (t + ".us").toLowerCase();
+}
+
+/* ============== CORS helper ============== */
+async function fetchTextWithFallback(url, opts={}){
+  async function tryFetch(u){
+    const res = await fetch(u, opts);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.text();
+  }
+  try{
+    return await tryFetch(url);
+  }catch{
+    // public text proxy fallback
+    return await tryFetch("https://r.jina.ai/" + url);
+  }
+}
+async function fetchJSONWithFallback(url, opts={}){
+  const txt = await fetchTextWithFallback(url, opts);
+  // proxy sometimes prepends; try to cut to first { or [
+  const i1 = txt.indexOf("{");
+  const i2 = txt.indexOf("[");
+  const i = Math.min(i1 === -1 ? 1e9 : i1, i2 === -1 ? 1e9 : i2);
+  const cleaned = (i < 1e9) ? txt.slice(i) : txt;
+  return JSON.parse(cleaned);
+}
+
+/* ============== Stooq prices ============== */
+function parseCSV(text){
+  const lines = text.replace(/\uFEFF/g,"").split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  // find header line that contains Date
+  let start = 0;
+  for (let i=0;i<Math.min(8, lines.length);i++){
+    if (lines[i].includes(",") && /date/i.test(lines[i])) { start = i; break; }
+  }
+  const rows = lines.slice(start);
+  const header = rows[0].split(",").map(s=>s.trim());
+  const out = [];
+  for (let i=1;i<rows.length;i++){
+    const cols = rows[i].split(",").map(s=>s.trim());
+    if (cols.length < header.length) continue;
+    const obj = {};
+    for (let j=0;j<header.length;j++) obj[header[j]] = cols[j];
+    out.push(obj);
+  }
+  return out;
+}
+async function fetchDailyCandles(ticker){
+  const sym = toStooqSymbol(ticker);
+  const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(sym)}&i=d`;
+  const txt = await fetchTextWithFallback(url);
+  const rows = parseCSV(txt);
+  const candles = rows.map(r=>({
+    date: r.Date,
+    open: Number(r.Open),
+    high: Number(r.High),
+    low: Number(r.Low),
+    close: Number(r.Close),
+    volume: Number(r.Volume),
+  })).filter(c=>c.date && isFinite(c.close));
+  return candles;
+}
+async function fetchIntradayQuoteClose(ticker){
+  const sym = toStooqSymbol(ticker);
+  const url = `https://stooq.com/q/l/?s=${encodeURIComponent(sym)}&f=sd2t2ohlcv&h&e=csv`;
+  const txt = await fetchTextWithFallback(url);
+  const rows = parseCSV(txt);
+  if (!rows.length) return null;
+  const r = rows[0];
+  const close = Number(r.Close ?? r.CLOSE ?? r.close);
+  return (isFinite(close) && close > 0) ? close : null;
+}
+
+/* ============== GDELT headlines ============== */
+function gdeltUTCMinusHours(hours){
+  const d = new Date(Date.now() - hours*3600*1000);
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth()+1).padStart(2,"0");
+  const dd = String(d.getUTCDate()).padStart(2,"0");
+  const hh = String(d.getUTCHours()).padStart(2,"0");
+  const mi = String(d.getUTCMinutes()).padStart(2,"0");
+  const ss = String(d.getUTCSeconds()).padStart(2,"0");
+  return `${yyyy}${mm}${dd}${hh}${mi}${ss}`;
+}
+function buildGdeltQuery(ticker){
+  const alias = ALIAS[ticker];
+  if (alias) return `(${ticker} OR "${alias}")`;
+  return `"${ticker}"`;
+}
+async function gdeltTimelineVol72(query){
+  const start = gdeltUTCMinusHours(72);
+  const end = gdeltUTCMinusHours(0);
+  const url = `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(query)}&mode=timelinevolraw&format=json&startdatetime=${start}&enddatetime=${end}&timelinesmooth=0`;
+  const json = await fetchJSONWithFallback(url);
+  const timeline = json.timeline || [];
+  return timeline.reduce((a,x)=>a + Number(x.value || 0), 0);
+}
+async function gdeltTopArticles(query, max=3){
+  const start = gdeltUTCMinusHours(72);
+  const end = gdeltUTCMinusHours(0);
+  const url = `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(query)}&mode=ArtList&format=json&startdatetime=${start}&enddatetime=${end}&maxrecords=${max}&sort=HybridRel`;
+  const json = await fetchJSONWithFallback(url);
+  const arts = (json.articles || []).map(a=>({
+    title: a.title,
+    url: a.url,
+    domain: a.domain
+  }));
+  return arts;
+}
+function surpriseKeywordHit(headlines){
+  const txt = headlines.map(h=>h.title||"").join(" ").toLowerCase();
+  return /\b(unexpected|surge|plunge|beats|misses|downgrade|upgrade|ban|sanction|tariff|strike|attack|lawsuit|court|probe|recall|breakthrough|approval|denied)\b/.test(txt);
+}
+
+/* ============== Macro risk (simple banner) ============== */
+function isWeekend(d){ const day=d.getDay(); return day===0||day===6; }
+function daysBetween(d1,d2){ return Math.floor((d2.getTime()-d1.getTime())/(24*3600*1000)); }
+
+function parseFutureDatesFromText(text){
+  // Find patterns like "January 31, 2026"
+  const re = /\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}\b/g;
+  const matches = [];
+  let m;
+  while ((m = re.exec(text)) !== null){
+    const d = new Date(m[0] + " 00:00:00");
+    if (!isNaN(d.getTime())) matches.push(d);
+  }
+  const today = new Date();
+  const future = matches.filter(d => d.getTime() >= today.getTime() - 12*3600*1000);
+  future.sort((a,b)=>a-b);
+  return future;
+}
+async function fetchNextMacroDate(){
+  // Best-effort: CPI + Jobs schedule pages. If blocked/unparsable → unknown.
+  const urls = [
+    "https://www.bls.gov/schedule/news_release/cpi.htm",
+    "https://www.bls.gov/schedule/news_release/empsit.htm",
+  ];
+  const dates = [];
+  for (const u of urls){
+    const txt = await fetchTextWithFallback(u);
+    const future = parseFutureDatesFromText(txt);
+    if (future.length) dates.push(future[0]);
+  }
+  dates.sort((a,b)=>a-b);
+  return dates.length ? dates[0] : null;
+}
+async function updateMacroBanner(){
+  const el = $("macroBanner");
+  el.textContent = "Macro: loading…";
+  el.className = "badge";
+
+  try{
+    const next = await fetchNextMacroDate();
+    if (!next){
+      el.textContent = "Macro: unknown (more conservative)";
+      el.className = "badge warn";
+      return {unknown:true, binarySoon:true, next:null};
+    }
+    const today = new Date();
+    const diff = Math.max(0, daysBetween(today, next));
+    const binarySoon = diff <= 2 && !isWeekend(next);
+    el.textContent = binarySoon
+      ? `Macro: binary ≤ 2 days (${next.toISOString().slice(0,10)})`
+      : `Macro: next ${next.toISOString().slice(0,10)}`;
+    el.className = binarySoon ? "badge warn" : "badge good";
+    return {unknown:false, binarySoon, next};
+  }catch{
+    el.textContent = "Macro: fetch failed (more conservative)";
+    el.className = "badge warn";
+    return {unknown:true, binarySoon:true, next:null};
+  }
+}
+
+/* ============== Trading rules (your core) ============== */
+function extensionPct(close, low5){
+  if (!isFinite(close) || !isFinite(low5) || low5 <= 0) return null;
+  return (close - low5) / low5 * 100;
+}
+function trafficLight(type, ext){
+  if (ext === null || Number.isNaN(ext)) return {light:"—", cls:"badge"};
+  if (type === "ETF"){
+    if (ext <= 3.0) return {light:"GREEN", cls:"badge good"};
+    if (ext <= 4.5) return {light:"AMBER", cls:"badge warn"};
+    return {light:"RED", cls:"badge bad"};
+  }else{
+    if (ext <= 4.0) return {light:"GREEN", cls:"badge good"};
+    if (ext <= 6.0) return {light:"AMBER", cls:"badge warn"};
+    return {light:"RED", cls:"badge bad"};
+  }
+}
+function priceSanity(close, lowPrev, low5){
+  const probs = [];
+  const ok = [close, lowPrev, low5].every(x=>isFinite(x) && x > 0);
+  if (!ok) probs.push("missing/invalid");
+  if (isFinite(close) && isFinite(low5) && close < low5) probs.push("close < low(5d)");
+  return probs;
+}
+
+function computeSetupCandidate(stat){
+  // Simple heuristic:
+  // Setup A: last close > last open AND close is within 1% of low(5d)
+  // Setup B: last 7 days range tight AND last close near 7-day high
+  const candles = stat.candles || [];
+  if (candles.length < 8) return {setup:null, reason:"Not enough history"};
+
+  const last = candles[candles.length - 1];
+  const closeGreen = last.close > last.open;
+  const nearSupport = Math.abs((last.close - stat.low5) / stat.low5) * 100 <= 1.0;
+
+  const last7 = candles.slice(-7);
+  const hi7 = Math.max(...last7.map(c=>c.high));
+  const lo7 = Math.min(...last7.map(c=>c.low));
+  const rangePct = (hi7 - lo7) / last.close * 100;
+  const tightThr = (stat.type === "ETF") ? 3.0 : 4.0;
+  const closeNearHigh = ((hi7 - last.close) / last.close) * 100 <= 0.4;
+
+  if (closeGreen && nearSupport) return {setup:"A", reason:"Pulled back near support and closed up."};
+  if (rangePct <= tightThr && closeNearHigh) return {setup:"B", reason:"Tight range and closed near the range high."};
+  return {setup:null, reason:"No clean Setup A/B today."};
+}
+
+function checklistScore(stat, macro){
+  // 0–5 yes/no; trade allowed only if GREEN + score>=4 (or >=5 if macro unknown)
+  let score = 0;
+  const yes = (b)=>{ if (b) score++; };
+
+  // 1 Timing: news heat present
+  yes((stat.newsCount72 ?? 0) >= 10);
+
+  // 2 Surprise: keyword scan
+  yes(!!stat.surprise);
+
+  // 3 Liquid: rough threshold using avgVol20*close
+  const dv = stat.dollarVol || 0;
+  yes(stat.type === "ETF" ? dv >= 20_000_000 : dv >= 50_000_000);
+
+  // 4 Risk clear: stop exists if lows exist
+  yes(isFinite(stat.lowPrev) && isFinite(stat.low5));
+
+  // 5 Room: if macro binary soon and broad ETF -> no
+  yes(!(macro.binarySoon && BROAD_ETFS.has(stat.ticker)));
+
+  return score;
+}
+
+function computeTradeCard(best, positionSize){
+  // Position size default slider (1000–2000)
+  // Setup-based entry/stop:
+  // A: entry near low5 (small buffer), stop below min(last.low, lowPrev)
+  // B: entry near 7d high (small buffer), stop below 7d low
+  const setupInfo = computeSetupCandidate(best);
+  if (!setupInfo.setup) return null;
+
+  const candles = best.candles || [];
+  const last = candles[candles.length - 1];
+
+  let entry, stop, setupNote;
+  if (setupInfo.setup === "A"){
+    entry = best.low5 * 1.002;
+    const pullbackLow = Math.min(last.low, best.lowPrev);
+    stop = pullbackLow * 0.998;
+    setupNote = "Setup A: pullback bounce near support.";
+  } else {
+    const last7 = candles.slice(-7);
+    const hi7 = Math.max(...last7.map(c=>c.high));
+    const lo7 = Math.min(...last7.map(c=>c.low));
+    entry = hi7 * 1.001;
+    stop = Math.min(lo7, best.lowPrev) * 0.998;
+    setupNote = "Setup B: tight range breakout.";
+  }
+
+  // Targets
+  const tLowPct  = (best.type === "ETF") ? 0.08 : 0.15;
+  const tHighPct = (best.type === "ETF") ? 0.12 : 0.25;
+  const targetLow = entry * (1 + tLowPct);
+  const targetHigh = entry * (1 + tHighPct);
+
+  // windows (simple weekday-based)
+  const today = new Date();
+  const activationExp = addTradingDays(today, 7).toISOString().slice(0,10);
+  const timeStop = addTradingDays(today, 20).toISOString().slice(0,10);
+
+  // Net math (Israel fees+tax)
+  const shares = positionSize / entry;
+  const midTarget = (targetLow + targetHigh) / 2;
+  const grossProfit = shares * (midTarget - entry);
+  const grossLoss = shares * (entry - stop);
+  const netProfit = (grossProfit - 16) * 0.75;
+  const netLoss = grossLoss + 16;
+
+  return {
+    ticker: best.ticker,
+    type: best.type,
+    setup: setupInfo.setup,
+    setupNote,
+    reason: best.reasonShort || "Price is GREEN and catalyst is timely.",
+    entry, stop, targetLow, targetHigh,
+    activationExp, timeStop,
+    positionSize, shares,
+    grossProfit, grossLoss, netProfit, netLoss,
+    topHeadline: best.headlines?.[0] || null,
+    checklist: best.checklist
+  };
+}
+
+function addTradingDays(startDate, n){
+  let d = new Date(startDate);
+  let left = n;
+  while (left > 0){
+    d.setDate(d.getDate() + 1);
+    if (!isWeekend(d)) left--;
+  }
+  return d;
+}
+
+/* ============== App state ============== */
+let lastRun = {
+  macro: {unknown:true, binarySoon:true, next:null},
+  focus: [],
+  focusStats: [],
+};
+
+function getWatchlist(){ return loadJSON(LS.watchlist, []); }
+function setWatchlist(list){ saveJSON(LS.watchlist, uniqUpper(list)); renderWatchlist(); }
+
+function getActiveTrade(){ return loadJSON(LS.active, null); }
+function setActiveTrade(t){ saveJSON(LS.active, t); renderActiveTrade(); }
+
+function renderWatchlist(){
+  const chips = $("chips");
+  const list = getWatchlist().slice(0, clampInt($("maxTracked").value, 3, 50));
+  chips.innerHTML = "";
+  if (!list.length){
+    chips.innerHTML = `<div class="tiny muted">No tickers yet. Add some (e.g., XLF MSFT SMH).</div>`;
+    return;
+  }
+  for (const t of list){
+    const el = document.createElement("span");
+    el.className = "chip";
+    el.innerHTML = `<span class="mono">${escapeHtml(t)}</span><button title="remove">×</button>`;
+    el.querySelector("button").onclick = () => setWatchlist(getWatchlist().filter(x=>x!==t));
+    chips.appendChild(el);
+  }
+}
+function renderActiveTrade(){
+  const at = getActiveTrade();
+  const pill = $("activeTradePill");
+  const card = $("activeTradeCard");
+
+  if (!at){
+    pill.textContent = "none";
+    card.style.display = "none";
+    return;
+  }
+  pill.textContent = at.ticker;
+  card.style.display = "block";
+
+  $("at_ticker").textContent = at.ticker;
+  $("at_entry").textContent = `$${fmt(at.entry,2)}`;
+  $("at_stop").textContent = `$${fmt(at.stop,2)}`;
+  $("at_target").textContent = `$${fmt(at.targetLow,2)} → $${fmt(at.targetHigh,2)}`;
+  $("at_timeStop").textContent = at.timeStop;
+  $("at_sessions").textContent = String(at.sessionsLeft ?? "—");
+  $("at_note").textContent = at.note || "—";
+}
+
+function clampInt(v, a, b){
+  const n = Number(v);
+  if (!isFinite(n)) return a;
+  return Math.max(a, Math.min(b, Math.round(n)));
+}
+
+/* ============== Focus selection (Stage 1) ============== */
+function pickFocus(stats, max=5){
+  // Choose 3–5 to focus: prefer ETFs, liquidity, known tickers
+  const scored = stats.map(s=>{
+    const knownBoost = (KNOWN_ETFS.has(s.ticker) || ALIAS[s.ticker]) ? 1.2 : 1.0;
+    const etfBoost = (s.type === "ETF") ? 1.15 : 1.0;
+    const sanityPenalty = (s.sanityProblems?.length ? 0.5 : 1.0);
+    const dv = s.dollarVol || 0;
+    const score = Math.log10(dv + 1) * 100 * knownBoost * etfBoost * sanityPenalty;
+    return {...s, _focusScore: score};
+  });
+  scored.sort((a,b)=>b._focusScore - a._focusScore);
+  return scored.slice(0, Math.max(3, Math.min(5, max))).map(x=>x.ticker);
+}
+
+/* ============== Manual override ============== */
+function renderManualTemplate(){
+  const focus = lastRun.focus || [];
+  if (!focus.length) return;
+  const ta = $("manualText");
+  if (!ta) return;
+  if (ta.value.trim()) return;
+
+  const header = "Ticker | Close | Low(prev) | Low(5d)";
+  const rows = focus.map(t=>`${t} |  |  | `);
+  ta.value = [header, ...rows].join("\n");
+}
+
+function parseManualPrices(text){
+  const map = {};
+  const lines = String(text||"").split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  for (const line of lines){
+    if (/ticker/i.test(line)) continue;
+    const parts = line.split(/[|,]/g).map(x=>x.trim());
+    if (parts.length < 4) continue;
+    const t = parts[0].toUpperCase();
+    const close = Number(parts[1]);
+    const lowPrev = Number(parts[2]);
+    const low5 = Number(parts[3]);
+    if (!t || !isFinite(close) || !isFinite(lowPrev) || !isFinite(low5)) continue;
+    map[t] = {close, lowPrev, low5};
+  }
+  return map;
+}
+
+/* ============== Rendering results ============== */
+function setHero(decision, text, badgeClass){
+  $("decisionTitle").textContent = decision;
+  $("decisionText").innerHTML = text;
+  const b = $("decisionBadge");
+  b.textContent = decision;
+  b.className = `badge ${badgeClass || ""}`.trim();
+}
+
+function setHeroCta(html){
+  $("heroCta").innerHTML = html || "";
+}
+
+function setFocusPill(arr){
+  $("focusPill").textContent = (arr && arr.length) ? arr.join(", ") : "—";
+}
+
+function renderFocusTable(focusStats){
+  const tb = $("focusTbody");
+  tb.innerHTML = "";
+  if (!focusStats.length){
+    tb.innerHTML = `<tr><td colspan="10" class="muted">No focus data.</td></tr>`;
+    return;
+  }
+  for (const s of focusStats){
+    const headline = s.headlines?.[0]
+      ? `<a href="${escapeHtml(s.headlines[0].url)}" target="_blank" rel="noreferrer noopener">${escapeHtml(s.headlines[0].title)}</a> <span class="muted">(${escapeHtml(s.headlines[0].domain||"")})</span>`
+      : `<span class="muted">—</span>`;
+
+    const notes = [];
+    if (s.sanityProblems?.length) notes.push("Data issue");
+    if (s.restricted) notes.push("Restricted by macro rule");
+    if (s.setupInfo?.setup === null) notes.push("No Setup A/B");
+    notes.push(`Checklist ${s.checklist}/5`);
+
+    tb.insertAdjacentHTML("beforeend", `
+      <tr>
+        <td class="mono"><b>${escapeHtml(s.ticker)}</b></td>
+        <td>${escapeHtml(s.type)}</td>
+        <td class="mono">$${fmt(s.close,2)}</td>
+        <td class="mono">$${fmt(s.lowPrev,2)}</td>
+        <td class="mono">$${fmt(s.low5,2)}</td>
+        <td class="mono">${fmt(s.ext,2)}%</td>
+        <td><span class="${s.lightCls}">${escapeHtml(s.light)}</span></td>
+        <td class="mono">${fmtInt(s.newsCount72 ?? 0)}</td>
+        <td class="tiny">${headline}</td>
+        <td class="tiny muted">${escapeHtml(notes.join(" • "))}</td>
+      </tr>
+    `);
+  }
+}
+
+function renderTradeCard(tc){
+  const headlineLine = tc.topHeadline
+    ? `• <a href="${escapeHtml(tc.topHeadline.url)}" target="_blank" rel="noreferrer noopener">${escapeHtml(tc.topHeadline.title)}</a> <span class="muted">(${escapeHtml(tc.topHeadline.domain||"")})</span>`
+    : `<span class="muted">No headline found.</span>`;
+
+  const midTarget = (tc.targetLow + tc.targetHigh)/2;
+
+  $("tradeCardHost").innerHTML = `
+    <div class="tradeCard">
+      <div class="row">
+        <span class="badge good">TRADE CARD</span>
+        <span class="pill"><span class="muted">Instrument</span> <span class="mono">${escapeHtml(tc.ticker)}</span></span>
+        <span class="pill"><span class="muted">Setup</span> ${escapeHtml(tc.setup)} <span class="muted">(${escapeHtml(tc.setupNote)})</span></span>
+        <span class="spacer"></span>
+        <button class="btn small green" id="acceptTradeBtn">Accept trade (lock)</button>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="tiny muted"><b>Why now (plain language):</b> ${escapeHtml(tc.reason)}</div>
+      <div class="tiny muted" style="margin-top:6px;"><b>Top headline:</b><br/>${headlineLine}</div>
+
+      <div class="kv">
+        <div class="box">
+          <b>Entry plan (LIMIT)</b>
+          <div class="mono">$${fmt(tc.entry,2)}</div>
+          <div class="tiny muted">Place a LIMIT near the trigger. Avoid chasing above it.</div>
+        </div>
+        <div class="box">
+          <b>Stop / invalidation</b>
+          <div class="mono">$${fmt(tc.stop,2)}</div>
+          <div class="tiny muted">No stop widening. If hit → exit.</div>
+        </div>
+        <div class="box">
+          <b>Target zone</b>
+          <div class="mono">$${fmt(tc.targetLow,2)} → $${fmt(tc.targetHigh,2)}</div>
+          <div class="tiny muted">ETFs: +8% to +12% • Stocks: +15% to +25%</div>
+        </div>
+        <div class="box">
+          <b>Timing rules</b>
+          <div class="tiny muted">Activation window: <span class="mono">${escapeHtml(tc.activationExp)}</span></div>
+          <div class="tiny muted">Time-stop: <span class="mono">${escapeHtml(tc.timeStop)}</span> (20 sessions)</div>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="row">
+        <span class="pill"><span class="muted">Position size</span>
+          <input id="posSize" type="range" min="1000" max="2000" step="50" value="${tc.positionSize}">
+          <span id="posVal" class="mono">${tc.positionSize}</span>
+        </span>
+        <span class="pill"><span class="muted">Fees</span> <span class="mono">$16</span> round-trip</span>
+        <span class="pill"><span class="muted">Tax</span> <span class="mono">25%</span> on gains</span>
+      </div>
+
+      <div class="kv">
+        <div class="box">
+          <b>Net outcomes (Israel)</b>
+          <div class="tiny muted">Net profit = (GrossProfit − 16) × 0.75</div>
+          <div class="tiny muted">Net loss = GrossLoss + 16</div>
+        </div>
+        <div class="box">
+          <b>Numbers (mid target used)</b>
+          <div class="tiny mono">
+            Shares = ${fmt(tc.shares,4)}<br/>
+            MidTarget = ${fmt(midTarget,2)}<br/>
+            GrossProfit = ${fmt(tc.grossProfit,2)}<br/>
+            GrossLoss = ${fmt(tc.grossLoss,2)}<br/>
+            <span style="color:var(--good);">NetProfit = ${fmt(tc.netProfit,2)}</span><br/>
+            <span style="color:var(--bad);">NetLoss = ${fmt(tc.netLoss,2)}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="footerNote">
+        This card is generated by rules and public data feeds. It may output NO TRADE often (by design).
+      </div>
+    </div>
+  `;
+
+  // Wire buttons + slider
+  const slider = document.getElementById("posSize");
+  const posVal = document.getElementById("posVal");
+  const acceptBtn = document.getElementById("acceptTradeBtn");
+
+  function recomputeFromPosSize(){
+    const positionSize = Number(slider.value);
+    posVal.textContent = String(positionSize);
+
+    // recompute math with new position size
+    const shares = positionSize / tc.entry;
+    const midTarget = (tc.targetLow + tc.targetHigh)/2;
+    const grossProfit = shares * (midTarget - tc.entry);
+    const grossLoss = shares * (tc.entry - tc.stop);
+    const netProfit = (grossProfit - 16) * 0.75;
+    const netLoss = grossLoss + 16;
+
+    // Update tc in memory so accept stores correct size
+    tc.positionSize = positionSize;
+    tc.shares = shares;
+    tc.grossProfit = grossProfit;
+    tc.grossLoss = grossLoss;
+    tc.netProfit = netProfit;
+    tc.netLoss = netLoss;
+
+    // Re-render just the values quickly by re-calling renderTradeCard is easiest for correctness.
+    // But we keep it lightweight: rerender full trade card.
+    renderTradeCard(tc);
+  }
+
+  slider.oninput = recomputeFromPosSize;
+
+  acceptBtn.onclick = ()=>{
+    const active = getActiveTrade();
+    if (active) return alert("Active trade exists. Close it before accepting a new one.");
+
+    const at = {
+      ticker: tc.ticker,
+      entry: tc.entry,
+      stop: tc.stop,
+      targetLow: tc.targetLow,
+      targetHigh: tc.targetHigh,
+      timeStop: tc.timeStop,
+      sessionsLeft: 20,
+      note: `Accepted Trade Card (${tc.setup}). Position size $${tc.positionSize}.`
+    };
+    setActiveTrade(at);
+    setHero("ACTIVE TRADE", `Trade accepted. New trades are locked until you close it.`, "bad");
+    setHeroCta(`<span class="badge bad">New trades locked</span> <span class="muted">Use the Active trade panel below.</span>`);
+    $("tradeCardHost").innerHTML = "";
+    $("focusTbody").innerHTML = `<tr><td colspan="10" class="muted">Active trade is set. New scans are locked.</td></tr>`;
+  };
+}
+
+function clearTradeCard(){
+  $("tradeCardHost").innerHTML = "";
+}
+
+/* ============== Main RUN ============== */
+async function runScan(){
+  const active = getActiveTrade();
+  if (active){
+    setHero("ACTIVE TRADE", `New trades are locked. Use the Active trade panel (Stop hit / Target hit / Close).`, "bad");
+    setHeroCta(`<span class="badge bad">Locked</span> <span class="muted">Close the active trade to unlock scans.</span>`);
+    return;
+  }
+
+  $("updatedAt").textContent = nowStr();
+  clearTradeCard();
+  $("focusTbody").innerHTML = `<tr><td colspan="10" class="muted">Loading focus data…</td></tr>`;
+
+  // Macro banner (best effort)
+  const macro = await updateMacroBanner();
+
+  // Watchlist
+  const maxTracked = clampInt($("maxTracked").value, 3, 50);
+  const watchlist = getWatchlist().slice(0, maxTracked);
+
+  if (!watchlist.length){
+    setFocusPill([]);
+    setHero("Ready", `Add tickers on the left, then click <span class="mono">RUN</span>.`, "");
+    setHeroCta("");
+    $("focusTbody").innerHTML = `<tr><td colspan="10" class="muted">No tickers.</td></tr>`;
+    return;
+  }
+
+  // Fetch prices for all tracked tickers (Stage 1 scoring)
+  const mode = getMode();
+  const includeStocks = $("includeStocks").checked;
+
+  const stats = [];
+  const queue = [...watchlist];
+  const workers = Array.from({length:4}, ()=> (async ()=>{
+    while(queue.length){
+      const t = queue.shift();
+      try{
+        const candles = await fetchDailyCandles(t);
+        if (!candles.length){
+          stats.push({ticker:t, type: classifyType(t), candles:[], close:null, lowPrev:null, low5:null, avgVol20:null, dollarVol:0, ext:null, light:"—", lightCls:"badge", sanityProblems:["no data"]});
+          continue;
+        }
+
+        let close = candles[candles.length-1].close;
+        if (mode === "INTRADAY"){
+          try{
+            const q = await fetchIntradayQuoteClose(t);
+            if (q) close = q;
+          }catch{}
+        }
+
+        const lowPrev = candles.length >=2 ? candles[candles.length-2].low : null;
+        const last5 = candles.slice(-5);
+        const low5 = last5.length ? Math.min(...last5.map(c=>c.low)) : null;
+
+        const last20 = candles.slice(-20);
+        const avgVol20 = last20.length ? (last20.reduce((a,c)=>a+(c.volume||0),0) / last20.length) : null;
+        const dollarVol = (avgVol20 && close) ? (avgVol20 * close) : 0;
+
+        const ext = extensionPct(close, low5);
+        const tl = trafficLight(classifyType(t), ext);
+        const sanityProblems = priceSanity(close, lowPrev, low5);
+
+        stats.push({
+          ticker:t,
+          type: classifyType(t),
+          candles,
+          close, lowPrev, low5,
+          avgVol20, dollarVol,
+          ext,
+          light: tl.light,
+          lightCls: tl.cls,
+          sanityProblems
+        });
+      }catch{
+        stats.push({ticker:t, type: classifyType(t), candles:[], close:null, lowPrev:null, low5:null, avgVol20:null, dollarVol:0, ext:null, light:"—", lightCls:"badge warn", sanityProblems:["fetch failed"]});
+      }
+    }
+  })());
+  await Promise.all(workers);
+
+  // Pick focus 3–5
+  stats.sort((a,b)=>watchlist.indexOf(a.ticker)-watchlist.indexOf(b.ticker));
+  const focus = pickFocus(stats, 5);
+  setFocusPill(focus);
+
+  // Stage 2 template generation
+  lastRun = {macro, focus, focusStats: []};
+  $("manualText").value = ""; // reset
+  renderManualTemplate();
+
+  // Fetch news only for focus tickers
+  const focusSet = new Set(focus);
+  const focusStats = stats.filter(s=>focusSet.has(s.ticker));
+
+  const newsQueue = [...focusStats];
+  const newsWorkers = Array.from({length:3}, ()=> (async ()=>{
+    while(newsQueue.length){
+      const s = newsQueue.shift();
+      try{
+        const q = buildGdeltQuery(s.ticker);
+        const [count72, headlines] = await Promise.all([
+          gdeltTimelineVol72(q),
+          gdeltTopArticles(q, 3)
+        ]);
+        s.newsCount72 = count72;
+        s.headlines = headlines;
+        s.surprise = surpriseKeywordHit(headlines);
+      }catch{
+        s.newsCount72 = 0;
+        s.headlines = [];
+        s.surprise = false;
+      }
+    }
+  })());
+  await Promise.all(newsWorkers);
+
+  // Apply guardrails, setup, checklist
+  for (const s of focusStats){
+    // Macro rule: if macro binary soon, broad ETFs are watchlist-only
+    s.restricted = macro.binarySoon && BROAD_ETFS.has(s.ticker);
+
+    s.setupInfo = computeSetupCandidate(s);
+    s.checklist = checklistScore(s, macro);
+
+    // Plain-language short reason
+    const reasons = [];
+    if (s.light !== "GREEN") reasons.push("price is extended");
+    if (s.sanityProblems?.length) reasons.push("data not valid");
+    if (s.restricted) reasons.push("macro binary soon");
+    if (!s.setupInfo.setup) reasons.push("no Setup A/B today");
+    if (s.checklist < 4) reasons.push("checklist below 4/5");
+    s.reasonShort = reasons.length ? reasons.join(", ") : "meets key rules today";
+  }
+
+  lastRun.focusStats = focusStats;
+  renderFocusTable(focusStats);
+
+  // Apply manual override if enabled
+  if ($("useManual").checked){
+    applyManualToFocus();
+    // focusStats updated; render again
+    renderFocusTable(lastRun.focusStats);
+  }
+
+  // Decision logic
+  // - Only GREEN
+  // - Sanity OK
+  // - Not restricted
+  // - Setup A or B exists
+  // - Checklist >= 4 (or >= 5 if macro unknown)
+  // - By default, only ETFs are trade candidates unless includeStocks is enabled
+  const requiredChecklist = macro.unknown ? 5 : 4;
+
+  const candidates = lastRun.focusStats
+    .filter(s => s.light === "GREEN")
+    .filter(s => !(s.sanityProblems?.length))
+    .filter(s => !s.restricted)
+    .filter(s => !!s.setupInfo.setup)
+    .filter(s => s.checklist >= requiredChecklist)
+    .filter(s => includeStocks ? true : (s.type === "ETF"));
+
+  // Rank: highest checklist, highest newsCount72, lowest ext, highest dollarVol
+  candidates.sort((a,b)=>{
+    if (b.checklist !== a.checklist) return b.checklist - a.checklist;
+    if ((b.newsCount72||0) !== (a.newsCount72||0)) return (b.newsCount72||0) - (a.newsCount72||0);
+    if ((a.ext ?? 999) !== (b.ext ?? 999)) return (a.ext ?? 999) - (b.ext ?? 999);
+    return (b.dollarVol ?? 0) - (a.dollarVol ?? 0);
+  });
+
+  if (!candidates.length){
+    // NO TRADE output: show triggers
+    setHero("NO TRADE", `
+      No symbol passed the full rule set today. That is normal.<br/>
+      <b>Next action:</b> use the upgrade triggers below. Re-run after close.
+    `, "bad");
+
+    const triggers = buildUpgradeTriggers(lastRun.focusStats);
+    setHeroCta(`
+      <span class="badge bad">NO TRADE</span>
+      <span class="muted">Watchlist triggers ready.</span>
+    `);
+
+    $("tradeCardHost").innerHTML = `
+      <div class="tradeCard">
+        <div class="row">
+          <span class="badge bad">WATCHLIST TRIGGERS</span>
+          <span class="pill"><span class="muted">Focus</span> <span class="mono">${escapeHtml(focus.join(", "))}</span></span>
+          ${macro.unknown ? `<span class="pill warn">Macro calendar unknown → stricter rules</span>` : ``}
+        </div>
+        <div class="hr"></div>
+        <div class="tiny muted"><b>Exact upgrade triggers (flip GREEN):</b> GREEN requires Extension% below threshold.</div>
+        <div class="tiny muted">That means: <span class="mono">Close ≤ Low(5d) × (1 + threshold)</span>.</div>
+        <div class="hr"></div>
+        <pre class="mono" style="margin:0; white-space:pre-wrap; font-size:12.5px; color:var(--text);">${escapeHtml(triggers)}</pre>
+        <div class="hr"></div>
+        <div class="tiny muted"><b>Headline that flips ON:</b> a specific catalyst headline that changes odds (CPI surprise, Fed signal shift, major approval/contract, sanctions/tariffs deadline moved).</div>
+        <div class="footerNote"><b>Tomorrow plan:</b> Run again after close. If any symbol turns GREEN and shows Setup A/B, the app will generate ONE Trade Card.</div>
+      </div>
+    `;
+    return;
+  }
+
+  // TRADE: build one trade card
+  const best = candidates[0];
+
+  setHero("TRADE", `
+    We found ONE candidate that is <b>GREEN</b>, has a clean setup, and meets the checklist.<br/>
+    <b>Next action:</b> review the Trade Card and accept it if you want to lock it as active.
+  `, "good");
+
+  setHeroCta(`
+    <span class="badge good">TRADE</span>
+    <span class="muted">One Trade Card generated below.</span>
+    ${macro.unknown ? `<span class="pill warn">Macro calendar unknown → this trade passed stricter rules</span>` : ``}
+  `);
+
+  const tc = computeTradeCard(best, 1500);
+  if (!tc){
+    // fallback: no setup
+    setHero("NO TRADE", `No clean Setup A/B was detected for the top candidate. Prefer NO TRADE.`, "bad");
+    setHeroCta(`<span class="badge bad">NO TRADE</span>`);
+    return;
+  }
+  renderTradeCard(tc);
+}
+
+/* ============== Upgrade triggers ============== */
+function buildUpgradeTriggers(focusStats){
+  const lines = [];
+  for (const s of focusStats){
+    if (!isFinite(s.low5) || !isFinite(s.close)) continue;
+    const thr = (s.type === "ETF") ? 0.03 : 0.04;
+    const maxCloseGreen = s.low5 * (1 + thr);
+    const need = (s.close <= maxCloseGreen) ? "Already GREEN by extension" : `Needs Close ≤ ${fmt(maxCloseGreen,2)}`;
+    lines.push(`${s.ticker}: Low(5d)=${fmt(s.low5,2)} • Thr=${(thr*100).toFixed(1)}% • MaxCloseGreen=${fmt(maxCloseGreen,2)} → ${need}`);
+  }
+  return lines.join("\n");
+}
+
+/* ============== Manual apply ============== */
+function applyManualToFocus(){
+  const useManual = $("useManual").checked;
+  if (!useManual) return;
+  const map = parseManualPrices($("manualText").value);
+  const focusSet = new Set(lastRun.focus);
+
+  lastRun.focusStats = lastRun.focusStats.map(s=>{
+    if (!focusSet.has(s.ticker)) return s;
+    const m = map[s.ticker];
+    if (!m) return s;
+
+    const close = m.close;
+    const lowPrev = m.lowPrev;
+    const low5 = m.low5;
+    const ext = extensionPct(close, low5);
+    const tl = trafficLight(s.type, ext);
+    const sanityProblems = priceSanity(close, lowPrev, low5);
+
+    // keep news + candles
+    const ns = {...s, close, lowPrev, low5, ext, light:tl.light, lightCls:tl.cls, sanityProblems};
+    ns.setupInfo = computeSetupCandidate(ns);
+    ns.checklist = checklistScore(ns, lastRun.macro);
+    ns.reasonShort = (()=>{
+      const reasons = [];
+      if (ns.light !== "GREEN") reasons.push("price is extended");
+      if (ns.sanityProblems?.length) reasons.push("data not valid");
+      if (ns.restricted) reasons.push("macro binary soon");
+      if (!ns.setupInfo.setup) reasons.push("no Setup A/B today");
+      if (ns.checklist < 4) reasons.push("checklist below 4/5");
+      return reasons.length ? reasons.join(", ") : "meets key rules today";
+    })();
+    return ns;
+  });
+}
+
+/* ============== UI actions ============== */
+$("addBtn").onclick = ()=>{
+  const add = parseTickers($("tickerInput").value);
+  if (!add.length) return;
+  setWatchlist([...getWatchlist(), ...add]);
+  $("tickerInput").value = "";
+};
+$("seedBtn").onclick = ()=> setWatchlist([...getWatchlist(), ...COMMON_SEED]);
+$("clearBtn").onclick = ()=>{
+  if (confirm("Clear watchlist?")) setWatchlist([]);
+};
+$("runBtn").onclick = runScan;
+
+$("applyManualBtn").onclick = ()=>{
+  if (!lastRun.focus.length) return alert("Click RUN first to generate focus tickers and a template.");
+  if (!$("useManual").checked) return alert("Tick 'Use manual prices' first.");
+  applyManualToFocus();
+  renderFocusTable(lastRun.focusStats);
+  alert("Manual prices applied to focus tickers. Click RUN again to re-evaluate decision with the updated values.");
+};
+
+$("proToggle").onchange = ()=>{
+  $("proArea").style.display = $("proToggle").checked ? "block" : "none";
+};
+
+$("maxTracked").onchange = renderWatchlist;
+
+$("closeTradeBtn").onclick = ()=>{
+  if (!getActiveTrade()) return;
+  if (confirm("Close trade now? This will unlock new trades.")){
+    setActiveTrade(null);
+    alert("Trade closed. New trades unlocked.");
+    setHero("Ready", `Trade closed. You can run scans again.`, "");
+    setHeroCta("");
+    clearTradeCard();
+  }
+};
+$("stopHitBtn").onclick = ()=>{
+  if (!getActiveTrade()) return;
+  if (confirm("Mark STOP HIT and close trade?")){
+    setActiveTrade(null);
+    alert("Stop hit recorded. New trades unlocked.");
+    setHero("Ready", `Stop hit recorded. You can run scans again.`, "");
+    setHeroCta("");
+    clearTradeCard();
+  }
+};
+$("targetHitBtn").onclick = ()=>{
+  if (!getActiveTrade()) return;
+  if (confirm("Mark TARGET HIT and close trade?")){
+    setActiveTrade(null);
+    alert("Target hit recorded. New trades unlocked.");
+    setHero("Ready", `Target hit recorded. You can run scans again.`, "");
+    setHeroCta("");
+    clearTradeCard();
+  }
+};
+
+/* ============== Init ============== */
+(async function init(){
+  $("updatedAt").textContent = nowStr();
+  renderWatchlist();
+  renderActiveTrade();
+
+  // Macro banner best effort (doesn't block UI)
+  lastRun.macro = await updateMacroBanner();
+
+  // Default hero
+  setHero("Ready", `Add tickers on the left, then click <span class="mono">RUN</span>.`, "");
+  setHeroCta("");
+})();
+</script>
+</body>
+</html>
